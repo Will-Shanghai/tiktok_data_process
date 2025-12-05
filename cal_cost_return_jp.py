@@ -28,12 +28,16 @@ def map_sku(name):
         return name
     if '最新アップグレード版' in name:
         return '黑色睫毛夹'
+    if '2025年最新版アップグレード 5D' in name:
+        return '白色睫毛推'
     elif '正規品 虫除け リアル' or 'Dragonfly' in name:
         return '蜻蜓两个装'
     elif '収納 ヘアアイロンポーチ 耐熱300度' in name:
         return '卷发棒隔热袋'
-    elif '髪飾' in name:
+    elif '髪飾' in name:  
         return '头饰'
+    elif 'Bluetooth 5.4ヘッドフォン、LCD保護ケース、ANCノイズキャンセル、ハイファイ音質' in name:
+        return '屏显耳机'
     return name
 
 # -----------------------
@@ -60,11 +64,11 @@ for file_path in file_list:
     # -----------------------
     # 读取第二行 Paid Time 列作为订单创建时间
     # -----------------------
-    if 'Paid Time' in df.columns and len(df) > 1:
-        order_creation_time = df.at[1, 'Paid Time']  # 第二行索引是1
+    if 'Created Time' in df.columns and len(df) > 1:
+        order_creation_time = df.at[1, 'Created Time']  # 第二行索引是1
         print(f"订单创建时间: {order_creation_time}")
     else:
-        print("未找到 Paid Time 列或文件行数不足")
+        print("未找到 Created Time 列或文件行数不足")
 
     # -----------------------
     # SKU 映射
@@ -85,15 +89,6 @@ for file_path in file_list:
     df_normal[r_col] = df_normal[r_col].map(parse_amount)
 
     # -----------------------
-    # 输出 P列和 R列
-    # -----------------------
-    print("\nP列折后价按顺序输出：")
-    print(df_normal[p_col])  # 输出P列
-
-    print("\nR列产品运费按顺序输出：")
-    print(df_normal[r_col])  # 输出R列
-
-    # -----------------------
     # 拆分前数量统计
     # -----------------------
     sku_summary_1 = df_normal.groupby('Product Name Mapped').size().reset_index(name='Product Quantity_PreSplit')
@@ -102,8 +97,8 @@ for file_path in file_list:
     # -----------------------
     # 产品成本及物流成本
     # -----------------------
-    cost_mapping_1 = {'黑色睫毛夹': 8.86}
-    logistics_cost_mapping_1 = {'黑色睫毛夹': 22.65}
+    cost_mapping_1 = {'黑色睫毛夹': 8.86, '白色睫毛推': 8.9}
+    logistics_cost_mapping_1 = {'黑色睫毛夹': 22.65, '白色睫毛推': 22.45}
 
     sku_summary_1['Product Cost'] = sku_summary_1['Product Name Mapped'].map(cost_mapping_1).fillna(0)
     sku_summary_1['Total Product Cost'] = (
@@ -140,7 +135,8 @@ for file_path in file_list:
         '黑色睫毛夹': 31.51,
         '蜻蜓两个装': 26.18,
         '头饰': 37.2,
-        '卷发棒隔热袋': 37.2
+        '卷发棒隔热袋': 37.2,
+        '屏显耳机': 62
     }
 
     sku_summary_2['Product Cost'] = sku_summary_2['Product Name Mapped'].map(cost_mapping_2).fillna(0)

@@ -32,7 +32,8 @@ sku_mapping = {
     'FCB&S001': '身体乳和防晒霜组合套装',
     'FCBLGREENTEE002': '身体乳单瓶',
     '2FCBLGREENTEE002': '身体乳双瓶',
-    '3FCBLGREENTEE002': '身体乳三瓶'
+    '3FCBLGREENTEE002': '身体乳三瓶',
+    'FCBLBO300': '身体乳300ml'
 }
 
 # -----------------------
@@ -43,6 +44,15 @@ for file_path in file_list:
 
     # 读取 CSV
     df = pd.read_csv(file_path)
+
+    # -----------------------
+    # 读取第二行 Created Time 列作为订单创建时间
+    # -----------------------
+    if 'Paid Time' in df.columns and len(df) > 1:
+        order_creation_time = df.iloc[1]['Created Time']  # iloc按位置取
+        print(f"订单创建时间: {order_creation_time}")
+    else:
+        print("未找到 Created Time 列或文件行数不足")
 
     # -------------------------------------------
     # 功能一：排除已取消，保留 Normal 订单
@@ -86,7 +96,8 @@ for file_path in file_list:
         '身体乳和防晒霜组合套装': 30.0,
         '精华液单瓶': 9.02,
         '精华液双瓶': 18.04,
-        '精华液三瓶': 27.06
+        '精华液三瓶': 27.06,
+        '身体乳300ml': 2.5
     }
 
     # 物流成本
@@ -100,7 +111,8 @@ for file_path in file_list:
         '身体乳和防晒霜组合套装': 5.0,  # 已拆分
         '精华液单瓶': 3.21,
         '精华液双瓶': 4.02,
-        '精华液三瓶': 4.83
+        '精华液三瓶': 4.83,
+        '身体乳300ml': 5
     }
 
     # 产品成本及总成本
@@ -115,7 +127,7 @@ for file_path in file_list:
     sku_summary['Total Cost Including Logistics'] = (sku_summary['Total Product Cost'] + sku_summary['Total Shipping Cost']).round(2)
 
     # 固定顺序输出
-    order = ['身体乳单瓶', '身体乳双瓶', '身体乳三瓶',
+    order = ['身体乳300ml', '身体乳单瓶', '身体乳双瓶', '身体乳三瓶',
              '防晒霜单瓶', '防晒霜双瓶', '防晒霜三瓶',
              '精华液单瓶', '精华液双瓶', '精华液三瓶', '身体乳和防晒霜组合套装']
 
@@ -183,14 +195,15 @@ for file_path in file_list:
         '防晒霜三瓶': 37.10,
         '精华液单瓶': 20.21,
         '精华液双瓶': 29.23,
-        '精华液三瓶': 38.25
+        '精华液三瓶': 38.25,
+        '身体乳300ml': 16.56
     }
 
     empty_summary['Product Cost'] = empty_summary['Product Name'].map(cost_mapping_function2).fillna(0)
     empty_summary['Total Product Cost'] = (empty_summary['Product Quantity_PostSplit'] * empty_summary['Product Cost']).round(2)
 
     # 6️⃣ 固定顺序输出
-    order = ['身体乳单瓶', '身体乳双瓶', '身体乳三瓶',
+    order = ['身体乳300ml', '身体乳单瓶', '身体乳双瓶', '身体乳三瓶',
              '防晒霜单瓶', '精华液单瓶', '精华液双瓶', '精华液三瓶', '身体乳和防晒霜组合套装']
 
     empty_summary['Sort Order'] = empty_summary['Product Name'].apply(lambda x: order.index(x) if x in order else len(order))
