@@ -1,0 +1,33 @@
+# ========== macOS系统文件 ==========
+.DS_Store
+.Spotlight-V100
+.Trashes
+*.swp
+*.swo
+
+# ========== Windows系统文件 ==========
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ========== 常用开发工具 ==========
+# VS Code
+.vscode/
+*.code-workspace
+
+# IDEA系列（IntelliJ/Android Studio）
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ========== 通用缓存/临时文件 ==========
+*.log
+*.tmp
+temp/
+cache/
