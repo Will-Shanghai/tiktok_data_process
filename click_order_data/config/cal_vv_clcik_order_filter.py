@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 # 1. 配置文件的路径：读取当前目录（'.'）下的所有文件
-current_directory = '.'
+current_directory = '../data/'
 print(f"✅ 准备处理当前目录下的所有Excel文件...")
 
 # --- 定义标准内部列名和映射关系 ---
@@ -24,7 +24,7 @@ COLUMN_MAP = {
 }
 
 # 定义需要分析的产品类别
-TARGET_CATEGORIES = ['精华液', '500ml身体乳A链', '500ml身体乳B链', '防晒霜']
+TARGET_CATEGORIES = ['精华液', '黑鸦片身体乳', '500ml身体乳A链', '500ml身体乳B链', '防晒霜']
 
 # 2. 获取当前目录下所有 Excel 文件
 try:
@@ -118,6 +118,8 @@ for file_name in file_list:
 
         if 'Serum' in product_name_str:
             return '精华液'
+        elif 'Black Opium' in product_name_str:
+            return '黑鸦片身体乳'
         elif 'Niacinamide' in product_name_str:
             return '500ml身体乳B链'
         elif '500g' in product_name_str:
@@ -218,7 +220,7 @@ for file_name in file_list:
 if final_summary_data:
     final_df = pd.DataFrame(final_summary_data)
     # 设置带目录的输出文件名
-    output_file_name = 'result/analysis_summary_report.xlsx'
+    output_file_name = '../result/analysis_summary_report.xlsx'
 
     # 将 DataFrame 导出为 Excel
     try:

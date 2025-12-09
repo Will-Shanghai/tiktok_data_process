@@ -23,6 +23,9 @@ r_col = 'Original Shipping Fee'
 # -----------------------
 # SKU 中文映射函数
 # -----------------------
+# -----------------------
+# SKU 中文映射函数 (修正版)
+# -----------------------
 def map_sku(name):
     if pd.isna(name):
         return name
@@ -30,14 +33,21 @@ def map_sku(name):
         return '黑色睫毛夹'
     if '2025年最新版アップグレード 5D' in name:
         return '白色睫毛推'
-    elif '正規品 虫除け リアル' or 'Dragonfly' in name:
+
+    # 修正：使用 'or' 连接两个 'in name' 的检查
+    elif ('正規品 虫除け リアル' in name) or ('Dragonfly' in name):
         return '蜻蜓两个装'
+
     elif '収納 ヘアアイロンポーチ 耐熱300度' in name:
         return '卷发棒隔热袋'
-    elif '髪飾' in name:  
+    elif '髪飾' in name:
         return '头饰'
     elif 'Bluetooth 5.4ヘッドフォン、LCD保護ケース、ANCノイズキャンセル、ハイファイ音質' in name:
         return '屏显耳机'
+    elif '電働眉剃' in name:
+        return '电动剃眉刀'
+    elif '車のサンバイ' in name:
+        return '车载手机支架'
     return name
 
 # -----------------------
@@ -97,8 +107,8 @@ for file_path in file_list:
     # -----------------------
     # 产品成本及物流成本
     # -----------------------
-    cost_mapping_1 = {'黑色睫毛夹': 8.86, '白色睫毛推': 8.9}
-    logistics_cost_mapping_1 = {'黑色睫毛夹': 22.65, '白色睫毛推': 22.45}
+    cost_mapping_1 = {'黑色睫毛夹': 8.86, '白色睫毛推': 8.9, '电动剃眉刀': 4.6, '车载手机支架': 4.6}
+    logistics_cost_mapping_1 = {'黑色睫毛夹': 22.65, '白色睫毛推': 22.45, '电动剃眉刀': 12.5, '车载手机支架':17.5}
 
     sku_summary_1['Product Cost'] = sku_summary_1['Product Name Mapped'].map(cost_mapping_1).fillna(0)
     sku_summary_1['Total Product Cost'] = (
@@ -136,7 +146,9 @@ for file_path in file_list:
         '蜻蜓两个装': 26.18,
         '头饰': 37.2,
         '卷发棒隔热袋': 37.2,
-        '屏显耳机': 62
+        '屏显耳机': 62,
+        '电动剃眉刀': 17.1,
+        '车载手机支架': 22.1,
     }
 
     sku_summary_2['Product Cost'] = sku_summary_2['Product Name Mapped'].map(cost_mapping_2).fillna(0)
