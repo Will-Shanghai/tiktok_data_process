@@ -40,8 +40,8 @@ def map_sku(name):
 
     elif '収納 ヘアアイロンポーチ 耐熱300度' in name:
         return '卷发棒隔热袋'
-    elif '髪飾' in name:
-        return '头饰'
+    elif '髪飾り 13 / 14点' in name:
+        return '发饰水银13/14点'
     elif 'Bluetooth 5.4ヘッドフォン、LCD保護ケース、ANCノイズキャンセル、ハイファイ音質' in name:
         return '屏显耳机'
     elif '電働眉剃' in name:
@@ -90,8 +90,7 @@ for file_path in file_list:
     # -----------------------
     df_normal = df[(df[status_col] != 'Canceled') & (df[status_col] != 'Unpaid') & (df[quantity_col] == 'Normal')].copy()
 
-    # 确保过滤后的 df_normal 有 46 行
-    print(f"过滤后的Normal订单行数: {len(df_normal)}")  # 输出过滤后的行数，应该是 46
+    print(f"过滤后的Normal订单行数: {len(df_normal)}")
 
     # 清洗 N 列、P 列 和 R 列
     df_normal[n_col] = df_normal[n_col].map(parse_amount)
@@ -107,8 +106,8 @@ for file_path in file_list:
     # -----------------------
     # 产品成本及物流成本
     # -----------------------
-    cost_mapping_1 = {'黑色睫毛夹': 8.86, '白色睫毛推': 8.9, '电动剃眉刀': 4.6, '车载手机支架': 4.6}
-    logistics_cost_mapping_1 = {'黑色睫毛夹': 22.65, '白色睫毛推': 22.45, '电动剃眉刀': 12.5, '车载手机支架':17.5}
+    cost_mapping_1 = {'黑色睫毛夹': 8.86, '白色睫毛推': 8.9, '电动剃眉刀': 4.6, '车载手机支架': 4.6, '发饰水银13/14点': 16.3}
+    logistics_cost_mapping_1 = {'黑色睫毛夹': 22.65, '白色睫毛推': 22.45, '电动剃眉刀': 12.5, '车载手机支架':17.5, '发饰水银13/14点': 22.2}
 
     sku_summary_1['Product Cost'] = sku_summary_1['Product Name Mapped'].map(cost_mapping_1).fillna(0)
     sku_summary_1['Total Product Cost'] = (
@@ -149,6 +148,7 @@ for file_path in file_list:
         '屏显耳机': 62,
         '电动剃眉刀': 17.1,
         '车载手机支架': 22.1,
+        '发饰水银13/14点': 38.5
     }
 
     sku_summary_2['Product Cost'] = sku_summary_2['Product Name Mapped'].map(cost_mapping_2).fillna(0)
