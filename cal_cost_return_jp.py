@@ -48,6 +48,8 @@ def map_sku(name):
         return '电动剃眉刀'
     elif '車のサンバイ' in name:
         return '车载手机支架'
+    elif '電働1台多用耳毛刀眉毛刀' in name:
+        return '电动鼻毛刀'
     return name
 
 # -----------------------
@@ -147,6 +149,7 @@ for file_path in file_list:
         '卷发棒隔热袋': 37.2,
         '屏显耳机': 62,
         '电动剃眉刀': 17.1,
+        '电动鼻毛刀': 37,
         '车载手机支架': 22.1,
         '发饰水银13/14点': 38.5
     }
