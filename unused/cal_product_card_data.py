@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 # 文件目录路径
-directory_path = './product_data/'
+directory_path = 'product_data/'
 
 # 获取目录下所有文件
 file_list = [f for f in os.listdir(directory_path) if f.endswith('.xlsx')]

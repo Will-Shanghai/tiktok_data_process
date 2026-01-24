@@ -5,9 +5,13 @@ import os
 # -----------------------
 # 1. 全局配置区
 # -----------------------
-folder_path = './data_VN'
+current_script_dir = os.path.dirname(os.path.abspath(__file__))
+folder_path = os.path.normpath(os.path.join(current_script_dir, '../data/data_VN'))
+output_filename = os.path.normpath(os.path.join(current_script_dir, '../result/Weekly_Performance_Report_VN.xlsx'))
 file_list = glob.glob(os.path.join(folder_path, '*.csv'))
 
+
+# 关键列名配置
 status_col = 'Order Status'
 quantity_col = 'Normal or Pre-order'
 sku_col = 'Seller SKU'
@@ -26,7 +30,6 @@ sku_mapping = {
     'SERUM001&BO001': '精华液&黑鸦片'
 }
 
-# 核心聚合映射
 category_mapping = {
     '身体乳单瓶': '身体乳', '身体乳双瓶': '身体乳', '身体乳三瓶': '身体乳',
     '精华液单瓶': '精华液', '精华液双瓶': '精华液', '精华液三瓶': '精华液', '精华液&黑鸦片': '精华液',
@@ -35,7 +38,6 @@ category_mapping = {
     '身体乳和防晒霜组合套装': '组合套装'
 }
 
-# 成本配置
 cost_mapping = {
     '身体乳单瓶': 9.36, '身体乳双瓶': 18.72, '身体乳三瓶': 28.08,
     '防晒霜单瓶': 8.37, '防晒霜双瓶': 16.74, '防晒霜三瓶': 25.11,
@@ -62,12 +64,11 @@ cost_mapping_function2 = {
 
 SORT_ORDER_LIST = ['身体乳300ml单瓶', '身体乳300ml双瓶', '身体乳300ml三瓶', '身体乳单瓶', '身体乳双瓶', '身体乳三瓶',
                    '防晒霜单瓶', '防晒霜双瓶', '防晒霜三瓶', '精华液单瓶', '精华液双瓶', '精华液三瓶',
-                   '身体乳和防晒霜组合套装',
-                   '精华液&黑鸦片']
+                   '身体乳和防晒霜组合套装', '精华液&黑鸦片']
 
-# 初始化容器
+# 初始化
 summary_list = []
-category_detail_list = []  # 这一次我们将在这里存入日期
+category_detail_list = []
 product_detail_data = {}
 
 # -----------------------
@@ -82,7 +83,6 @@ for file_path in file_list:
         for col in [n_col, p_col, r_col]:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-        # 提取日期
         order_date_str = 'N/A'
         if 'Created Time' in df.columns and len(df) > 1:
             raw_time = df.iloc[1]['Created Time']
@@ -93,15 +93,14 @@ for file_path in file_list:
         else:
             order_date_str = file_name
 
-        # --- 功能 A：Normal 销售订单 ---
-        df_normal = df[(df[status_col] != '已取消') & (df[quantity_col] == 'Normal')].copy()
+        # Normal 订单处理
+        df_normal = df[~df[status_col].isin(['已取消', 'Canceled']) & (df[quantity_col] == 'Normal')].copy()
         df_normal['Product Name'] = df_normal[sku_col].map(lambda x: sku_mapping.get(x, x))
 
         sku_qty_pre = df_normal['Product Name'].value_counts().to_dict()
         sku_sales_map = df_normal.groupby('Product Name').apply(lambda x: (x[n_col] + x[p_col]).sum()).to_dict()
         sku_p_map = df_normal.groupby('Product Name')[p_col].sum().to_dict()
 
-        # 套装拆分逻辑
         combo_name = '身体乳和防晒霜组合套装'
         post_split_qty = sku_qty_pre.copy()
         if combo_name in post_split_qty:
@@ -110,8 +109,9 @@ for file_path in file_list:
                 post_split_qty[single] = post_split_qty.get(single, 0) + c_qty
             post_split_qty[combo_name] = 0
 
-        # --- 功能 B：寄样/赠品订单 ---
-        df_sample = df[(df[status_col] != '已取消') & (df[quantity_col].isna() | (df[quantity_col] == ''))].copy()
+        # 寄样订单处理
+        df_sample = df[
+            ~df[status_col].isin(['已取消', 'Canceled']) & (df[quantity_col].isna() | (df[quantity_col] == ''))].copy()
         df_sample['Product Name'] = df_sample[sku_col].map(lambda x: sku_mapping.get(x, x))
         sample_qty_dict = df_sample['Product Name'].value_counts().to_dict()
 
@@ -121,85 +121,82 @@ for file_path in file_list:
                 sample_qty_dict[single] = sample_qty_dict.get(single, 0) + s_c_qty
             sample_qty_dict[combo_name] = 0
 
-        # --- 功能 C：指标归集 ---
-        current_file_p_cost = 0
-        current_file_l_cost = 0
-        current_file_s_cost = 0
-
+        # 指标归集
+        file_p_cost, file_l_cost, file_s_cost = 0, 0, 0
         all_names = set(list(post_split_qty.keys()) + list(sample_qty_dict.keys()) + list(sku_sales_map.keys()))
 
         for name in all_names:
-            q_n = post_split_qty.get(name, 0)
+            q_n = post_split_qty.get(name, 0);
             q_s = sample_qty_dict.get(name, 0)
-
-            p_cost = q_n * cost_mapping.get(name, 0)
-            l_cost = q_n * logistics_cost_mapping.get(name, 0)
+            p_cost = q_n * cost_mapping.get(name, 0);
+            l_cost = q_n * logistics_cost_mapping.get(name, 0);
             s_cost = q_s * cost_mapping_function2.get(name, 0)
-
-            current_file_p_cost += p_cost
-            current_file_l_cost += l_cost
-            current_file_s_cost += s_cost
-
-            # 【重要修改】：存入列表时带上日期，以便后续按日期+大类聚合
+            file_p_cost += p_cost;
+            file_l_cost += l_cost;
+            file_s_cost += s_cost
             category_detail_list.append({
-                '日期': order_date_str,
-                '大类': category_mapping.get(name, '其他'),
+                '日期': order_date_str, '大类': category_mapping.get(name, '其他'),
                 '销售额': sku_sales_map.get(name, 0),
-                'P列折后价': sku_p_map.get(name, 0),
-                '产品成本': p_cost,
-                '物流成本': l_cost,
-                '寄样支出': s_cost
+                'P列折后价': sku_p_map.get(name, 0), '产品成本': p_cost, '物流成本': l_cost, '寄样支出': s_cost
             })
 
-        # Weekly Summary 容器
-        file_sales_total = df_normal[n_col].sum() + df_normal[p_col].sum()
         summary_list.append({
-            '文件名称': file_name,
-            '订单日期': order_date_str,
-            '销售总额(N+P)': file_sales_total,
-            '汇率后(VND/3600)': round(file_sales_total / 3600, 2),
-            'P列折后价总和': df_normal[p_col].sum(),
-            '售出产品成本总和': current_file_p_cost,
-            '物流成本总和': current_file_l_cost,
-            '寄样支出总和': current_file_s_cost
+            '文件名称': file_name, '订单日期': order_date_str,
+            '销售总额(N+P)': (df_normal[n_col].sum() + df_normal[p_col].sum()),
+            '汇率后(VND/3600)': round((df_normal[n_col].sum() + df_normal[p_col].sum()) / 3600, 2),
+            'P列折后价总和': df_normal[p_col].sum(), '售出产品成本总和': file_p_cost, '物流成本总和': file_l_cost,
+            '寄样支出总和': file_s_cost
         })
-
         product_detail_data[order_date_str] = post_split_qty
 
     except Exception as e:
         print(f"处理失败 {file_name}: {e}")
 
 # -----------------------
-# 3. 生成最终报表
+# 3. 报表生成与强力校验 (macOS & Windows)
 # -----------------------
-
-# 1. Weekly Summary
 df_weekly = pd.DataFrame(summary_list)
-
-# 2. Category Aggregation 【修改聚合逻辑】
-# 现在按 '日期' 和 '大类' 两个字段进行聚合
 df_cat_summary = pd.DataFrame(category_detail_list).groupby(['日期', '大类']).sum().reset_index()
 df_cat_summary['汇率后(销售额/3600)'] = (df_cat_summary['销售额'] / 3600).round(2)
-
-# 重新排序列，确保日期在第一列
-df_cat_summary = df_cat_summary[
-    ['日期', '大类', '销售额', '汇率后(销售额/3600)', 'P列折后价', '产品成本', '物流成本', '寄样支出']]
-# 按日期排序
 df_cat_summary = df_cat_summary.sort_values(by='日期', ascending=True)
 
-# 3. Quantity Pivot
 df_pivot = pd.DataFrame.from_dict(product_detail_data, orient='index').fillna(0).astype(int)
-valid_cols = [c for c in SORT_ORDER_LIST if c in df_pivot.columns]
-df_pivot = df_pivot[valid_cols].T
+df_pivot = df_pivot[[c for c in SORT_ORDER_LIST if c in df_pivot.columns]].T
 df_pivot.index.name = '产品名称'
+df_pivot.loc['汇总'] = df_pivot.sum(axis=0)
 
-# 写入 Excel
-output_filename = 'Weekly_Performance_Report_VN.xlsx'
+# 定义 Excel 产生的隐藏临时文件路径
+# Mac 下 Excel 打开文件会生成一个 ~$ 开头的同名文件
+temp_excel_file = os.path.join(os.path.dirname(os.path.abspath(output_filename)),
+                               "~$" + os.path.basename(output_filename))
+
+file_accessible = False
+while not file_accessible:
+    # 检查1: 是否存在隐藏临时文件 (Mac 专用)
+    if os.path.exists(temp_excel_file):
+        print(f"\n⚠️  警告: 检测到 Excel 临时文件，'{output_filename}' 正在运行中。")
+        input("👉 请先【彻底关闭】Excel 软件，然后按【回车键】重试...")
+    # 检查2: 如果原文件存在，尝试重命名 (Windows 专用)
+    elif os.path.exists(output_filename):
+        try:
+            os.rename(output_filename, output_filename)
+            file_accessible = True
+        except:
+            print(f"\n⚠️  无法写入！文件 '{output_filename}' 被占用。")
+            input("👉 请关闭 Excel 窗口后，按【回车键】重试...")
+    else:
+        file_accessible = True
+
+# 写入
 with pd.ExcelWriter(output_filename, engine='xlsxwriter') as writer:
     df_weekly.to_excel(writer, sheet_name='Weekly Summary', index=False)
     df_cat_summary.to_excel(writer, sheet_name='Category Aggregation', index=False)
     df_pivot.to_excel(writer, sheet_name='Quantity Pivot')
 
+    workbook = writer.book
+    ws_pivot = writer.sheets['Quantity Pivot']
+    black_font = workbook.add_format({'font_color': 'black', 'bold': False})
+    ws_pivot.set_row(len(df_pivot), None, black_font)
+
 print("-" * 30)
-print(f"✅ 处理完成！报表已生成：{output_filename}")
-print("提示：Category Aggregation 现在已包含日期列，支持多日期汇总对比。")
+print(f"✅ 处理完成！数据已安全保存至：{output_filename}")
