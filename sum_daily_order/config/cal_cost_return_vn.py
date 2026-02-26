@@ -85,7 +85,7 @@ for file_path in file_list:
     try:
         df = pd.read_csv(file_path)
         df.columns = df.columns.str.strip()
-        df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+        df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
 
         for col in [n_col, p_col, r_col]:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -106,7 +106,7 @@ for file_path in file_list:
         df_normal['Mapped Name'] = df_normal[sku_col].map(lambda x: sku_mapping.get(x, '新产品(待核实)'))
 
         sku_qty_pre = df_normal['Mapped Name'].value_counts().to_dict()
-        sku_sales_map = df_normal.groupby('Mapped Name').apply(lambda x: (x[n_col] + x[p_col]).sum()).to_dict()
+        sku_sales_map = (df_normal[n_col] + df_normal[p_col]).groupby(df_normal['Mapped Name']).sum().to_dict()
         sku_p_map = df_normal.groupby('Mapped Name')[p_col].sum().to_dict()
 
         # 组合装拆分
@@ -166,7 +166,7 @@ if not summary_list:
 else:
     # A. Summary 表排序
     df_summary = pd.DataFrame(summary_list)
-    df_summary['temp_date'] = pd.to_datetime(df_summary['订单日期'], dayfirst=True)
+    df_summary['temp_date'] = pd.to_datetime(df_summary['订单日期'], format='%d/%m/%Y', errors='coerce')
     df_summary = df_summary.sort_values('temp_date').drop(columns=['temp_date'])
 
     # B. Category Aggregation 表排序

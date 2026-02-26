@@ -24,9 +24,9 @@ COLUMN_MAP = {
     STD_CCR_COL: ['点击成交转化率（视频）', 'Click-to-order rate (Video)'],
 }
 
-# --- 2. 全局产品分类定义 (无需区分站点) ---
+# --- 2. 全局产品分类定义 ---
 TARGET_CATEGORIES = [
-    '精华液', '黑鸦片身体乳', '500ml身体乳A链', '500ml身体乳B链','防晒霜',
+    '精华液', '黑鸦片身体乳', '500ml身体乳A链', '500ml身体乳B链', '防晒霜',
     '车载手机支架', '电动修眉刀', '男士修鼻毛刀', '三合一充电器', '切菜神器', '屏显耳机'
 ]
 
@@ -103,8 +103,7 @@ for file_name in file_list:
 
     df['产品分类'] = df[STD_ITEM_COL].apply(map_product)
 
-    # --- 8. 执行统计 (仅针对 TARGET_CATEGORIES 中存在的) ---
-    # 自动获取当前文件中存在的、且在我们目标列表中的分类
+    # --- 8. 执行统计 ---
     present_categories = [c for c in TARGET_CATEGORIES if c in df['产品分类'].unique()]
 
     for category in present_categories:
@@ -114,13 +113,18 @@ for file_name in file_list:
         count_with_orders = len(videos_with_orders)
         total_videos = len(group)
 
+        # 汇总成交订单数 (P列)
+        total_orders_sum = group[STD_ORDER_COL].sum()
+
+        # 按照要求的顺序构建字典
         final_summary_data.append({
             '源文件': file_name,
             '日期范围': standard_date_range,
             '产品分类': category,
             '总视频数': total_videos,
             '出单视频数': count_with_orders,
-            '总播放量VV': group[STD_VV_COL].sum(),
+            '总成交订单数': total_orders_sum,  # 已放在出单视频数后
+            '总播放量VV': group[STD_VV_COL].sum(),  # 已放在总成交订单数后
             '视频出单率': count_with_orders / total_videos if total_videos > 0 else 0,
             '出单视频-平均点击率': videos_with_orders[STD_CTR_COL].mean() if count_with_orders > 0 else 0,
             '出单视频-平均转化率': videos_with_orders[STD_CCR_COL].mean() if count_with_orders > 0 else 0,
@@ -136,10 +140,11 @@ if final_summary_data:
 
     timestamp = datetime.now().strftime("%m%d%H%M")
 
-    # 按日期范围分组导出，不再按站点分组
+    # 按日期范围分组导出
     for date_range, group_df in final_df.groupby('日期范围'):
         safe_date = str(date_range).replace(' ~ ', '-').replace(' ', '_')
         output_name = f"数据汇总-{safe_date}-{timestamp}.xlsx"
+        # 导出时 Pandas 会保持 final_summary_data 中定义的列顺序
         group_df.to_excel(os.path.join(output_base_dir, output_name), index=False)
         print(f"🎉 报表已生成: {output_name}")
 else:
