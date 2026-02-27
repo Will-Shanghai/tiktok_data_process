@@ -11,7 +11,7 @@ def map_sku(name):
     if '最新アップグレード版' in name: return '黑色睫毛夹'
     if '2025年最新版アップグレード 5D' in name: return '白色睫毛推'
     if ('正規品 虫除け リアル' in name) or ('Dragonfly' in name): return '蜻蜓两个装'
-    if '収納 ヘアアイロンポーチ 耐熱300度' in name: return '卷发棒隔热袋'
+    if '収納 ヘアアイロンポーチ 耐热300度' in name: return '卷发棒隔热袋'
     if '髪飾り 13 / 14点' in name: return '发饰水银13/14点'
     if '手作り 11点' in name: return '发饰水银11点'
     if 'Bluetooth 5.4ヘッドフォン' in name: return '屏显耳机'
@@ -20,7 +20,7 @@ def map_sku(name):
     if '電働1台多用耳毛刀眉毛刀' in name: return '电动鼻毛刀'
     if '美容液の大容量版' in name: return '头发护理精华'
     if 'Bluetooth&ヘッドフォンMP 3' in name: return '蓝牙MP3'
-    if '車充电器' in name: return '车载充电器'
+    if '车充电器' in name: return '车载充电器'
     if '睫毛 フェイスケア' in name: return '新款睫毛夹'
     if 'イヤホンクリップ' in name: return '耳机夹'
     return name
@@ -43,11 +43,10 @@ category_mapping = {
 }
 
 # -----------------------
-# 2. 店铺差异化配置 (当前数据保持一致)
+# 2. 店铺差异化配置
 # -----------------------
 EXCHANGE_RATE = 20.0
 
-# 通用成本数据 (基于你提供的数值)
 common_cost_1 = {
     '黑色睫毛夹': 8.86, '白色睫毛推': 8.9, '电动剃眉刀': 4.6, '车载手机支架': 4.6,
     '发饰水银13/14点': 16.3, '电动鼻毛刀': 8.8, '头发护理精华': 10, '蓝牙MP3': 43, '车载充电器': 18.4
@@ -111,7 +110,7 @@ def run_report(store_key):
         try:
             df = pd.read_csv(file_path)
         except Exception as e:
-            print(f"读取失败 {file_name}: {e}");
+            print(f"读取失败 {file_name}: {e}")
             continue
 
         # 日期获取
@@ -156,8 +155,8 @@ def run_report(store_key):
             l_cost = q_norm * config['logistics_mapping_1'].get(name, 0)
             s_cost = q_samp * config['cost_mapping_2'].get(name, 0)
 
-            file_p_cost += p_cost;
-            file_l_cost += l_cost;
+            file_p_cost += p_cost
+            file_l_cost += l_cost
             file_s_cost += s_cost
 
             category_detail_list.append({
@@ -185,19 +184,25 @@ def run_report(store_key):
         df_cat_summary['汇率后金额'] = (df_cat_summary['销售额'] / EXCHANGE_RATE).round(2)
         df_cat_summary = df_cat_summary.sort_values(by=['temp_date', '大类']).drop(columns=['temp_date'])
 
+        # 处理 Product Quantity Detail Sheet
         df_detail_raw = pd.DataFrame.from_dict(product_detail_data, orient='index').fillna(0).astype(int)
         df_detail_raw.index = pd.to_datetime(df_detail_raw.index)
         df_detail_raw = df_detail_raw.sort_index()
         df_detail_raw.index = df_detail_raw.index.strftime('%Y-%m-%d')
+
+        # --- 修复逻辑开始 ---
         df_detail = df_detail_raw.T
+        df_detail.index.name = '商品名称'  # 核心修复：显式命名索引，填充左上角A1单元格
         df_detail.loc['汇总'] = df_detail.sum(axis=0)
+        # --- 修复逻辑结束 ---
 
         # 写入 Excel
         try:
             with pd.ExcelWriter(output_filename, engine='xlsxwriter') as writer:
                 df_final_weekly.to_excel(writer, sheet_name='Weekly Summary', index=False)
                 df_cat_summary.to_excel(writer, sheet_name='Category Aggregation', index=False)
-                df_detail.to_excel(writer, sheet_name='Product Quantity Detail')
+                # index=True 会将我们刚刚命名的 '商品名称' 写入第一列标题
+                df_detail.to_excel(writer, sheet_name='Product Quantity Detail', index=True)
             print(f"✅ [{config['name_cn']}] 处理完成: {output_filename}")
         except Exception as e:
             print(f"❌ [{config['name_cn']}] 保存失败 (请检查Excel是否打开): {e}")

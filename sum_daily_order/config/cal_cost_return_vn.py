@@ -30,11 +30,10 @@ SORT_ORDER_LIST = ['身体乳300ml单瓶', '身体乳300ml双瓶', '身体乳300
 # -----------------------
 # 2. 店铺差异化配置
 # -----------------------
-# 目前两个店成本保持一致，后续可单独修改
 common_cost = {
     '身体乳单瓶': 9.36, '身体乳双瓶': 18.72, '身体乳三瓶': 28.08, '防晒霜单瓶': 8.37,
     '精华液单瓶': 9.02, '身体乳300ml单瓶': 3.08, '精华液&黑鸦片': 12.1, '观山香薰': 14.4,
-    '身体乳和防晒霜组合套装': 30.0  # 补全其他...
+    '身体乳和防晒霜组合套装': 30.0
 }
 common_logistics = {
     '身体乳单瓶': 6.22, '身体乳双瓶': 9.53, '身体乳三瓶': 13.1, '防晒霜单瓶': 3.15,
@@ -85,7 +84,6 @@ def run_vietnam_report(store_key):
     category_detail_list = []
     product_detail_data = {}
 
-    # 列名定义
     status_col, quantity_col, sku_col = 'Order Status', 'Normal or Pre-order', 'Seller SKU'
     n_col, p_col, r_col = 'SKU Platform Discount', 'SKU Subtotal After Discount', 'Original Shipping Fee'
 
@@ -99,7 +97,6 @@ def run_vietnam_report(store_key):
             for col in [n_col, p_col, r_col]:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # 日期解析
             order_date_str = 'N/A'
             if 'Created Time' in df.columns and len(df) > 0:
                 try:
@@ -109,7 +106,6 @@ def run_vietnam_report(store_key):
 
             df[sku_col] = df[sku_col].replace('', None).fillna('Missing_SKU')
 
-            # 正常订单
             cancel_tags = ['已取消', 'Canceled', 'Cancelled']
             df_normal = df[~df[status_col].isin(cancel_tags) & (df[quantity_col] == 'Normal')].copy()
             df_normal['Mapped Name'] = df_normal[sku_col].map(lambda x: sku_mapping.get(x, '新产品(待核实)'))
@@ -118,7 +114,6 @@ def run_vietnam_report(store_key):
             sku_sales_map = (df_normal[n_col] + df_normal[p_col]).groupby(df_normal['Mapped Name']).sum().to_dict()
             sku_p_map = df_normal.groupby('Mapped Name')[p_col].sum().to_dict()
 
-            # 组合装拆分逻辑
             combo_name = '身体乳和防晒霜组合套装'
             post_split_qty = sku_qty_pre.copy()
             if combo_name in post_split_qty:
@@ -127,13 +122,11 @@ def run_vietnam_report(store_key):
                     post_split_qty[single] = post_split_qty.get(single, 0) + c_qty
                 post_split_qty[combo_name] = 0
 
-            # 样品订单
             df_sample = df[~df[status_col].isin(cancel_tags) & (
-                        df[quantity_col].isna() | (df[quantity_col] == '') | (df[quantity_col] == 'NaN'))].copy()
+                    df[quantity_col].isna() | (df[quantity_col] == '') | (df[quantity_col] == 'NaN'))].copy()
             df_sample['Mapped Name'] = df_sample[sku_col].map(lambda x: sku_mapping.get(x, '新产品(待核实)'))
             sample_qty_dict = df_sample['Mapped Name'].value_counts().to_dict()
 
-            # 成本计算
             file_p_cost, file_l_cost, file_s_cost = 0, 0, 0
             all_names = set(list(post_split_qty.keys()) + list(sample_qty_dict.keys()))
 
@@ -170,22 +163,16 @@ def run_vietnam_report(store_key):
         except Exception as e:
             print(f"❌ 处理失败 {file_name}: {e}")
 
-    # -----------------------
-    # 4. 排序与写入
-    # -----------------------
     if summary_list:
-        # A. Summary
         df_summary = pd.DataFrame(summary_list)
         df_summary['t'] = pd.to_datetime(df_summary['订单日期'], format='%d/%m/%Y', errors='coerce')
         df_summary = df_summary.sort_values('t').drop(columns=['t'])
 
-        # B. Category
         df_cat = pd.DataFrame(category_detail_list).groupby(['日期', '大类']).sum().reset_index()
         df_cat['t'] = pd.to_datetime(df_cat['日期'], dayfirst=True)
         df_cat['汇率后(销售额)'] = (df_cat['销售额'] / conf['exchange_rate']).round(2)
         df_cat = df_cat.sort_values(['t', '大类']).drop(columns=['t'])
 
-        # C. Pivot
         df_pivot_raw = pd.DataFrame.from_dict(product_detail_data, orient='index').fillna(0).astype(int)
         df_pivot_raw.index = pd.to_datetime(df_pivot_raw.index, dayfirst=True)
         df_pivot_raw = df_pivot_raw.sort_index()
@@ -193,20 +180,20 @@ def run_vietnam_report(store_key):
 
         valid_cols = [c for c in SORT_ORDER_LIST if c in df_pivot_raw.columns]
         other_cols = [c for c in df_pivot_raw.columns if c not in SORT_ORDER_LIST]
-        df_pivot = df_pivot_raw[valid_cols + other_cols].T
-        df_pivot.loc['汇总'] = df_pivot.sum(axis=0)
 
-        # 写入
+        # --- 修复代码：设置索引名称 ---
+        df_pivot = df_pivot_raw[valid_cols + other_cols].T
+        df_pivot.index.name = '商品名称'  # 这样 A1 单元格就会显示这个文本
+        df_pivot.loc['汇总'] = df_pivot.sum(axis=0)
+        # ---------------------------
+
         with pd.ExcelWriter(output_filename, engine='xlsxwriter') as writer:
             df_summary.to_excel(writer, sheet_name='Weekly Summary', index=False)
             df_cat.to_excel(writer, sheet_name='Category Aggregation', index=False)
-            df_pivot.to_excel(writer, sheet_name='Quantity Pivot')
+            df_pivot.to_excel(writer, sheet_name='Quantity Pivot', index=True)  # 确保 index=True
         print(f"✅ [{conf['cn_name']}] 报表已生成！")
 
 
-# -----------------------
-# 5. 执行入口
-# -----------------------
 if __name__ == "__main__":
     for store in ['local', 'cross_border']:
         run_vietnam_report(store)
