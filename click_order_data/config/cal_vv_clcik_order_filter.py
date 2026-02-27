@@ -112,23 +112,29 @@ for file_name in file_list:
 
         count_with_orders = len(videos_with_orders)
         total_videos = len(group)
-
-        # 汇总成交订单数 (P列)
         total_orders_sum = group[STD_ORDER_COL].sum()
+        total_vv_sum = group[STD_VV_COL].sum()
 
-        # 按照要求的顺序构建字典
+        # 计算比率数值
+        video_order_rate = count_with_orders / total_videos if total_videos > 0 else 0
+        avg_ctr = videos_with_orders[STD_CTR_COL].mean() if count_with_orders > 0 else 0
+        avg_ccr = videos_with_orders[STD_CCR_COL].mean() if count_with_orders > 0 else 0
+        avg_vv_ordered = videos_with_orders[STD_VV_COL].mean() if count_with_orders > 0 else 0
+
+        # 构建字典并格式化百分比
         final_summary_data.append({
             '源文件': file_name,
             '日期范围': standard_date_range,
             '产品分类': category,
             '总视频数': total_videos,
             '出单视频数': count_with_orders,
-            '总成交订单数': total_orders_sum,  # 已放在出单视频数后
-            '总播放量VV': group[STD_VV_COL].sum(),  # 已放在总成交订单数后
-            '视频出单率': count_with_orders / total_videos if total_videos > 0 else 0,
-            '出单视频-平均点击率': videos_with_orders[STD_CTR_COL].mean() if count_with_orders > 0 else 0,
-            '出单视频-平均转化率': videos_with_orders[STD_CCR_COL].mean() if count_with_orders > 0 else 0,
-            '出单视频-平均VV': videos_with_orders[STD_VV_COL].mean() if count_with_orders > 0 else 0,
+            '总成交订单数': total_orders_sum,
+            '总播放量VV': total_vv_sum,
+            # 使用 f-string 进行百分比转换
+            '视频出单率': f"{video_order_rate:.2%}",
+            '出单视频-平均点击率': f"{avg_ctr:.2%}",
+            '出单视频-平均转化率': f"{avg_ccr:.2%}",
+            '出单视频-平均VV': round(avg_vv_ordered, 2),
         })
 
 # --- 9. 导出结果 ---
@@ -142,9 +148,10 @@ if final_summary_data:
 
     # 按日期范围分组导出
     for date_range, group_df in final_df.groupby('日期范围'):
-        safe_date = str(date_range).replace(' ~ ', '-').replace(' ', '_')
+        # 处理日期字符串作为文件名时的非法字符
+        safe_date = str(date_range).replace(' ~ ', '-').replace(' ', '_').replace('/', '-')
         output_name = f"数据汇总-{safe_date}-{timestamp}.xlsx"
-        # 导出时 Pandas 会保持 final_summary_data 中定义的列顺序
+
         group_df.to_excel(os.path.join(output_base_dir, output_name), index=False)
         print(f"🎉 报表已生成: {output_name}")
 else:
