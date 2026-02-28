@@ -18,7 +18,7 @@ def map_sku(name):
     if '電働眉剃' in name: return '电动剃眉刀'
     if '車のサンバイ' in name: return '车载手机支架'
     if '電働1台多用耳毛刀眉毛刀' in name: return '电动鼻毛刀'
-    if '美容液の大容量版' in name: return '头发护理精华'
+    if '美容液の大容量版' or '290g | 美容室専売品' in name: return '头发护理精华'
     if 'Bluetooth&ヘッドフォンMP 3' in name: return '蓝牙MP3'
     if '车充电器' in name: return '车载充电器'
     if '睫毛 フェイスケア' in name: return '新款睫毛夹'
@@ -93,7 +93,6 @@ def run_report(store_key):
 
     print(f"🚀 开始处理 [{config['name_cn']}]，共 {len(file_list)} 个文件")
 
-    # 关键列名
     status_col = 'Order Status'
     quantity_col = 'Normal or Pre-order'
     product_col = 'Product Name'
@@ -104,6 +103,7 @@ def run_report(store_key):
     weekly_summary_list = []
     category_detail_list = []
     product_detail_data = {}
+    all_samples_collector = []
 
     for file_path in file_list:
         file_name = os.path.basename(file_path)
@@ -113,7 +113,6 @@ def run_report(store_key):
             print(f"读取失败 {file_name}: {e}")
             continue
 
-        # 日期获取
         order_date_str = "N/A"
         if 'Created Time' in df.columns and len(df) > 0:
             try:
@@ -121,9 +120,12 @@ def run_report(store_key):
             except:
                 order_date_str = str(df.iloc[0]['Created Time']).split(' ')[0]
 
-        cancel_keywords = ['Canceled', 'Unpaid', 'キャンセル済み', '未払い']
+        cancel_keywords = [
+            'Canceled', 'Unpaid', 'キャンセル済み', '未払い',
+            '已取消', '未支付', '部分发货后取消'
+        ]
 
-        # 正常订单处理
+        # 1. 正常订单
         df_normal = df[~df[status_col].isin(cancel_keywords) & (df[quantity_col] == 'Normal')].copy()
         df_normal['Mapped Name'] = df_normal[product_col].map(map_sku)
         for col in [n_col, p_col, r_col]:
@@ -133,13 +135,19 @@ def run_report(store_key):
         product_detail_data[order_date_str] = sku_counts
         norm_agg = df_normal.groupby('Mapped Name').agg({n_col: 'sum', p_col: 'sum', r_col: 'sum'}).reset_index()
 
-        # 样品处理
+        # 2. 样品处理
         df_sample = df[
             ~df[status_col].isin(cancel_keywords) & (df[quantity_col].isna() | (df[quantity_col] == ''))].copy()
         df_sample['Mapped Name'] = df_sample[product_col].map(map_sku)
+
+        if not df_sample.empty:
+            sample_temp = df_sample[['Mapped Name']].copy()
+            sample_temp['日期'] = order_date_str
+            all_samples_collector.append(sample_temp)
+
         sample_counts = df_sample['Mapped Name'].value_counts().to_dict()
 
-        # 成本累计
+        # 3. 成本计算
         file_p_cost, file_l_cost, file_s_cost = 0, 0, 0
         all_names = set(list(sku_counts.keys()) + list(sample_counts.keys()))
 
@@ -172,8 +180,9 @@ def run_report(store_key):
             '寄样总支出(含物流)': round(file_s_cost, 2)
         })
 
-    # --- 排序逻辑与导出 ---
+    # --- 4. 数据导出 ---
     if weekly_summary_list:
+        # Sheet 1 & 2 保持不变
         df_final_weekly = pd.DataFrame(weekly_summary_list)
         df_final_weekly['temp_date'] = pd.to_datetime(df_final_weekly['订单创建时间'])
         df_final_weekly = df_final_weekly.sort_values('temp_date').drop(columns=['temp_date'])
@@ -184,33 +193,49 @@ def run_report(store_key):
         df_cat_summary['汇率后金额'] = (df_cat_summary['销售额'] / EXCHANGE_RATE).round(2)
         df_cat_summary = df_cat_summary.sort_values(by=['temp_date', '大类']).drop(columns=['temp_date'])
 
-        # 处理 Product Quantity Detail Sheet
+        # Sheet 3: Product Quantity Detail (已有汇总)
         df_detail_raw = pd.DataFrame.from_dict(product_detail_data, orient='index').fillna(0).astype(int)
         df_detail_raw.index = pd.to_datetime(df_detail_raw.index)
         df_detail_raw = df_detail_raw.sort_index()
         df_detail_raw.index = df_detail_raw.index.strftime('%Y-%m-%d')
-
-        # --- 修复逻辑开始 ---
         df_detail = df_detail_raw.T
-        df_detail.index.name = '商品名称'  # 核心修复：显式命名索引，填充左上角A1单元格
+        df_detail.index.name = '商品名称'
         df_detail.loc['汇总'] = df_detail.sum(axis=0)
-        # --- 修复逻辑结束 ---
 
-        # 写入 Excel
+        # Sheet 4: Sample Statistics (新增汇总行逻辑)
+        if all_samples_collector:
+            df_all_samples = pd.concat(all_samples_collector)
+            df_sample_pivot = df_all_samples.pivot_table(
+                index='Mapped Name',
+                columns='日期',
+                aggfunc='size',
+                fill_value=0
+            )
+            df_sample_pivot.columns = pd.to_datetime(df_sample_pivot.columns)
+            df_sample_pivot = df_sample_pivot.sort_index(axis=1)
+            df_sample_pivot.columns = df_sample_pivot.columns.strftime('%Y-%m-%d')
+
+            # 先计算横向总和
+            df_sample_pivot['总样品数'] = df_sample_pivot.sum(axis=1)
+            df_sample_pivot.index.name = '商品名称'
+
+            # --- 关键修改：增加最下方的“汇总”行 ---
+            df_sample_pivot = df_sample_pivot.sort_values(by='总样品数', ascending=False)
+            df_sample_pivot.loc['汇总'] = df_sample_pivot.sum(axis=0)
+        else:
+            df_sample_pivot = pd.DataFrame([["无样品数据"]], columns=["提示"])
+
         try:
             with pd.ExcelWriter(output_filename, engine='xlsxwriter') as writer:
                 df_final_weekly.to_excel(writer, sheet_name='Weekly Summary', index=False)
                 df_cat_summary.to_excel(writer, sheet_name='Category Aggregation', index=False)
-                # index=True 会将我们刚刚命名的 '商品名称' 写入第一列标题
                 df_detail.to_excel(writer, sheet_name='Product Quantity Detail', index=True)
-            print(f"✅ [{config['name_cn']}] 处理完成: {output_filename}")
+                df_sample_pivot.to_excel(writer, sheet_name='Sample Statistics', index=True)
+            print(f"✅ [{config['name_cn']}] 处理完成，Sample Statistics 已添加汇总行")
         except Exception as e:
-            print(f"❌ [{config['name_cn']}] 保存失败 (请检查Excel是否打开): {e}")
+            print(f"❌ [{config['name_cn']}] 保存失败: {e}")
 
 
-# -----------------------
-# 4. 运行
-# -----------------------
 if __name__ == "__main__":
     for store in ['local', 'direct']:
         run_report(store)
