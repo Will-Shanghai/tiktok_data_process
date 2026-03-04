@@ -18,6 +18,7 @@ def map_sku(name):
     if '電働眉剃' in name: return '电动剃眉刀'
     if '車のサンバイ' in name: return '车载手机支架'
     if '電働1台多用耳毛刀眉毛刀' in name: return '电动鼻毛刀'
+    if '3D風景ミ二チュア シ-ンコレクション' in name: return '剪影贴纸'
     if '美容液の大容量版' or '290g | 美容室専売品' in name: return '头发护理精华'
     if 'Bluetooth&ヘッドフォンMP 3' in name: return '蓝牙MP3'
     if '车充电器' in name: return '车载充电器'

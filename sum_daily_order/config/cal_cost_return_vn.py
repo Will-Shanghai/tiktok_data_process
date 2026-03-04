@@ -83,7 +83,8 @@ def run_vietnam_report(store_key):
         try:
             df = pd.read_csv(file_path)
             df.columns = df.columns.str.strip()
-            df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
+            # --- 修正点：将 .map 改为 .applymap 以兼容旧版本 ---
+            df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
 
             for col in [n_col, p_col, r_col]:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -163,29 +164,20 @@ def run_vietnam_report(store_key):
             print(f"❌ 处理失败 {file_name}: {e}")
 
     # -----------------------
-    # 4. 数据导出逻辑
+    # 4. 数据导出逻辑 ---
     # -----------------------
     if summary_list:
-        # 1. Weekly Summary
         df_summary = pd.DataFrame(summary_list)
         df_summary['t'] = pd.to_datetime(df_summary['订单日期'], format='%d/%m/%Y', errors='coerce')
         df_summary = df_summary.sort_values('t').drop(columns=['t'])
 
-        # 2. Category Aggregation
         df_cat_raw = pd.DataFrame(category_detail_list).groupby(['日期', '大类']).sum().reset_index()
         df_cat_raw['t'] = pd.to_datetime(df_cat_raw['日期'], dayfirst=True)
-
-        # 计算汇率后的销售额
         df_cat_raw['汇率后(销售额)'] = (df_cat_raw['销售额'] / conf['exchange_rate']).round(2)
-
-        # --- 重新定义列顺序，将汇率后放在销售额后面 ---
         cols_order = ['日期', '大类', '销售额', '汇率后(销售额)', 'P列折后价', '产品成本', '物流成本', '寄样支出']
         df_cat = df_cat_raw[cols_order].copy()
-
-        # 排序并清除辅助列
         df_cat = df_cat.assign(t=df_cat_raw['t']).sort_values(['t', '大类']).drop(columns=['t'])
 
-        # 3. Quantity Pivot
         df_pivot_raw = pd.DataFrame.from_dict(product_detail_data, orient='index').fillna(0).astype(int)
         df_pivot_raw.index = pd.to_datetime(df_pivot_raw.index, dayfirst=True)
         df_pivot_raw = df_pivot_raw.sort_index()
@@ -196,7 +188,6 @@ def run_vietnam_report(store_key):
         df_pivot.index.name = '商品名称'
         df_pivot.loc['汇总'] = df_pivot.sum(axis=0)
 
-        # 4. Sample Statistics
         if all_samples_collector:
             df_all_samples = pd.concat(all_samples_collector)
             df_sample_pivot = df_all_samples.pivot_table(
@@ -214,14 +205,13 @@ def run_vietnam_report(store_key):
         else:
             df_sample_pivot = pd.DataFrame([["今日无样品数据"]], columns=["提示"])
 
-        # 写入文件
         with pd.ExcelWriter(output_filename, engine='xlsxwriter') as writer:
             df_summary.to_excel(writer, sheet_name='Weekly Summary', index=False)
             df_cat.to_excel(writer, sheet_name='Category Aggregation', index=False)
             df_pivot.to_excel(writer, sheet_name='Quantity Pivot', index=True)
             df_sample_pivot.to_excel(writer, sheet_name='Sample Statistics', index=True)
 
-        print(f"✅ [{conf['cn_name']}] 报表已生成！(列顺序已优化)")
+        print(f"✅ [{conf['cn_name']}] 报表已生成！")
 
 
 if __name__ == "__main__":
