@@ -199,18 +199,29 @@ def run_report(store_key):
 
     # --- 4. 数据导出 ---
     if weekly_summary_list:
-        # Sheet 1 & 2 保持不变
+        # Sheet 1: Weekly Summary
         df_final_weekly = pd.DataFrame(weekly_summary_list)
         df_final_weekly['temp_date'] = pd.to_datetime(df_final_weekly['订单创建时间'])
         df_final_weekly = df_final_weekly.sort_values('temp_date').drop(columns=['temp_date'])
 
+        # Sheet 2: Category Aggregation (修改此处列顺序)
         df_cat_base = pd.DataFrame(category_detail_list)
         df_cat_summary = df_cat_base.groupby(['日期', '大类']).sum().reset_index()
         df_cat_summary['temp_date'] = pd.to_datetime(df_cat_summary['日期'])
-        df_cat_summary['汇率后金额'] = (df_cat_summary['销售额'] / EXCHANGE_RATE).round(2)
-        df_cat_summary = df_cat_summary.sort_values(by=['temp_date', '大类']).drop(columns=['temp_date'])
 
-        # Sheet 3: Product Quantity Detail (已有汇总)
+        # 计算汇率金额
+        df_cat_summary['汇率后金额'] = (df_cat_summary['销售额'] / EXCHANGE_RATE).round(2)
+
+        # --- 核心修改：重新排序列顺序 ---
+        cols_order = ['日期', '大类', '销售额', '汇率后金额', 'P列折后价', '产品成本', '物流成本', '寄样支出']
+        df_cat_summary = df_cat_summary[cols_order].copy()
+
+        # 排序并清除临时排序列
+        df_cat_summary = df_cat_summary.assign(temp_date=pd.to_datetime(df_cat_summary['日期'])) \
+            .sort_values(by=['temp_date', '大类']) \
+            .drop(columns=['temp_date'])
+
+        # Sheet 3: Product Quantity Detail
         df_detail_raw = pd.DataFrame.from_dict(product_detail_data, orient='index').fillna(0).astype(int)
         df_detail_raw.index = pd.to_datetime(df_detail_raw.index)
         df_detail_raw = df_detail_raw.sort_index()
@@ -219,7 +230,7 @@ def run_report(store_key):
         df_detail.index.name = '商品名称'
         df_detail.loc['汇总'] = df_detail.sum(axis=0)
 
-        # Sheet 4: Sample Statistics (新增汇总行逻辑)
+        # Sheet 4: Sample Statistics
         if all_samples_collector:
             df_all_samples = pd.concat(all_samples_collector)
             df_sample_pivot = df_all_samples.pivot_table(
@@ -232,11 +243,8 @@ def run_report(store_key):
             df_sample_pivot = df_sample_pivot.sort_index(axis=1)
             df_sample_pivot.columns = df_sample_pivot.columns.strftime('%Y-%m-%d')
 
-            # 先计算横向总和
             df_sample_pivot['总样品数'] = df_sample_pivot.sum(axis=1)
             df_sample_pivot.index.name = '商品名称'
-
-            # --- 关键修改：增加最下方的“汇总”行 ---
             df_sample_pivot = df_sample_pivot.sort_values(by='总样品数', ascending=False)
             df_sample_pivot.loc['汇总'] = df_sample_pivot.sum(axis=0)
         else:
@@ -248,7 +256,7 @@ def run_report(store_key):
                 df_cat_summary.to_excel(writer, sheet_name='Category Aggregation', index=False)
                 df_detail.to_excel(writer, sheet_name='Product Quantity Detail', index=True)
                 df_sample_pivot.to_excel(writer, sheet_name='Sample Statistics', index=True)
-            print(f"✅ [{config['name_cn']}] 处理完成，Sample Statistics 已添加汇总行")
+            print(f"✅ [{config['name_cn']}] 处理完成，汇率后金额列已移动。")
         except Exception as e:
             print(f"❌ [{config['name_cn']}] 保存失败: {e}")
 

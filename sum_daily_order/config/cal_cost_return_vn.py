@@ -73,7 +73,7 @@ def run_vietnam_report(store_key):
     summary_list = []
     category_detail_list = []
     product_detail_data = {}
-    all_samples_collector = []  # 用于收集所有样品的 DataFrame 列表
+    all_samples_collector = []
 
     status_col, quantity_col, sku_col = 'Order Status', 'Normal or Pre-order', 'Seller SKU'
     n_col, p_col, r_col = 'SKU Platform Discount', 'SKU Subtotal After Discount', 'Original Shipping Fee'
@@ -106,7 +106,6 @@ def run_vietnam_report(store_key):
             sku_sales_map = (df_normal[n_col] + df_normal[p_col]).groupby(df_normal['Mapped Name']).sum().to_dict()
             sku_p_map = df_normal.groupby('Mapped Name')[p_col].sum().to_dict()
 
-            # 组合装拆分逻辑
             combo_name = '身体乳和防晒霜组合套装'
             post_split_qty = sku_qty_pre.copy()
             if combo_name in post_split_qty:
@@ -115,13 +114,11 @@ def run_vietnam_report(store_key):
                     post_split_qty[single] = post_split_qty.get(single, 0) + c_qty
                 post_split_qty[combo_name] = 0
 
-            # --- B. 处理样品订单 (核心改动) ---
-            # 筛选非取消且 quantity_col 不为 Normal 的行
+            # --- B. 处理样品订单 ---
             df_sample = df[~df[status_col].isin(cancel_tags) & (df[quantity_col] != 'Normal')].copy()
             df_sample['Mapped Name'] = df_sample[sku_col].map(lambda x: sku_mapping.get(x, '新产品(待核实)'))
 
             if not df_sample.empty:
-                # 收集用于新 Sheet 的数据
                 sample_temp = df_sample[['Mapped Name']].copy()
                 sample_temp['日期'] = order_date_str
                 all_samples_collector.append(sample_temp)
@@ -175,12 +172,20 @@ def run_vietnam_report(store_key):
         df_summary = df_summary.sort_values('t').drop(columns=['t'])
 
         # 2. Category Aggregation
-        df_cat = pd.DataFrame(category_detail_list).groupby(['日期', '大类']).sum().reset_index()
-        df_cat['t'] = pd.to_datetime(df_cat['日期'], dayfirst=True)
-        df_cat['汇率后(销售额)'] = (df_cat['销售额'] / conf['exchange_rate']).round(2)
-        df_cat = df_cat.sort_values(['t', '大类']).drop(columns=['t'])
+        df_cat_raw = pd.DataFrame(category_detail_list).groupby(['日期', '大类']).sum().reset_index()
+        df_cat_raw['t'] = pd.to_datetime(df_cat_raw['日期'], dayfirst=True)
 
-        # 3. Quantity Pivot (正常销售量)
+        # 计算汇率后的销售额
+        df_cat_raw['汇率后(销售额)'] = (df_cat_raw['销售额'] / conf['exchange_rate']).round(2)
+
+        # --- 重新定义列顺序，将汇率后放在销售额后面 ---
+        cols_order = ['日期', '大类', '销售额', '汇率后(销售额)', 'P列折后价', '产品成本', '物流成本', '寄样支出']
+        df_cat = df_cat_raw[cols_order].copy()
+
+        # 排序并清除辅助列
+        df_cat = df_cat.assign(t=df_cat_raw['t']).sort_values(['t', '大类']).drop(columns=['t'])
+
+        # 3. Quantity Pivot
         df_pivot_raw = pd.DataFrame.from_dict(product_detail_data, orient='index').fillna(0).astype(int)
         df_pivot_raw.index = pd.to_datetime(df_pivot_raw.index, dayfirst=True)
         df_pivot_raw = df_pivot_raw.sort_index()
@@ -191,21 +196,18 @@ def run_vietnam_report(store_key):
         df_pivot.index.name = '商品名称'
         df_pivot.loc['汇总'] = df_pivot.sum(axis=0)
 
-        # 4. Sample Statistics (新增样品统计 Sheet)
+        # 4. Sample Statistics
         if all_samples_collector:
             df_all_samples = pd.concat(all_samples_collector)
-            # 透视表：行是商品名，列是日期，值是计数
             df_sample_pivot = df_all_samples.pivot_table(
                 index='Mapped Name',
                 columns='日期',
                 aggfunc='size',
                 fill_value=0
             )
-            # 统一日期排序
             df_sample_pivot.columns = pd.to_datetime(df_sample_pivot.columns, dayfirst=True)
             df_sample_pivot = df_sample_pivot.sort_index(axis=1)
             df_sample_pivot.columns = df_sample_pivot.columns.strftime('%d/%m/%Y')
-
             df_sample_pivot['总样品数'] = df_sample_pivot.sum(axis=1)
             df_sample_pivot.index.name = '商品名称'
             df_sample_pivot = df_sample_pivot.sort_values(by='总样品数', ascending=False)
@@ -219,7 +221,7 @@ def run_vietnam_report(store_key):
             df_pivot.to_excel(writer, sheet_name='Quantity Pivot', index=True)
             df_sample_pivot.to_excel(writer, sheet_name='Sample Statistics', index=True)
 
-        print(f"✅ [{conf['cn_name']}] 报表已生成！(包含样品统计)")
+        print(f"✅ [{conf['cn_name']}] 报表已生成！(列顺序已优化)")
 
 
 if __name__ == "__main__":
