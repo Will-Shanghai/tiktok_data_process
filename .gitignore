@@ -30,4 +30,4 @@ $RECYCLE.BIN/
 *.log
 *.tmp
 temp/
-cache/
+cache/.DS_Store
