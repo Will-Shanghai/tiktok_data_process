@@ -48,34 +48,29 @@ def parse_amount(value):
 # -----------------------
 EXCHANGE_RATE = 20.0
 
-# 产品成本
 common_cost_1 = {
     '黑色睫毛夹': 8.86, '白色睫毛推': 8.9, '电动剃眉刀': 4.6, '车载手机支架': 4.6, '镁膏': 12,
     '发饰水银13/14点': 16.3, '发饰水银11点': 16.3, '电动鼻毛刀': 7.8, '头发护理精华': 10,
     '蓝牙MP3': 43, '车载充电器': 18.4, '脱毛器': 50
 }
 
-# 本土店物流成本
 common_logistics_1 = {
     '黑色睫毛夹': 22.65, '白色睫毛推': 22.45, '电动剃眉刀': 12.5, '车载手机支架': 17.5,
     '发饰水银13/14点': 22.2, '发饰水银11点': 22.2, '电动鼻毛刀': 14, '头发护理精华': 41,
     '蓝牙MP3': 24.02, '车载充电器': 23.47
 }
 
-# 直邮店物流成本
 common_logistics_2 = {
     '黑色睫毛夹': 22.65, '白色睫毛推': 22.45, '电动剃眉刀': 12.5, '车载手机支架': 17.5, '镁膏': 22,
     '发饰水银13/14点': 22.2, '发饰水银11点': 22.2, '电动鼻毛刀': 25, '头发护理精华': 25,
     '蓝牙MP3': 24.02, '车载充电器': 23.47
 }
 
-# 本土店寄样成本
 sample_cost_1 = {
     '黑色睫毛夹': 31.51, '蜻蜓两个装': 26.18, '卷发棒隔热袋': 37.2, '头发护理精华': 51,
     '屏显耳机': 62, '电动剃眉刀': 17.1, '车载手机支架': 22.1, '发饰水银13/14点': 38.5, '电动鼻毛刀': 21.8
 }
 
-# 直邮店寄样成本
 sample_cost_2 = {
     '黑色睫毛夹': 31.51, '蜻蜓两个装': 26.18, '卷发棒隔热袋': 37.2, '头发护理精华': 35, '镁膏': 37,
     '屏显耳机': 62, '电动剃眉刀': 17.1, '车载手机支架': 22.1, '发饰水银13/14点': 38.5, '电动鼻毛刀': 32.8
@@ -187,7 +182,6 @@ def run_report(store_key):
             file_l_cost += l_cost
             file_s_cost += s_cost
 
-            # 大类名称直接使用 map_sku 后的简称
             cat_name = name
             if any('\u3040' <= c <= '\u30ff' for c in str(cat_name)) and not any(
                     '\u4e00' <= c <= '\u9fff' for c in str(cat_name)):
@@ -207,7 +201,7 @@ def run_report(store_key):
             '寄样总支出(含物流)': round(file_s_cost, 2)
         })
 
-    # --- 4. 数据导出 ---
+    # --- 4. 数据导出逻辑修正（重点：时间排序） ---
     if weekly_summary_list:
         # Sheet 1: Weekly Summary
         df_final_weekly = pd.DataFrame(weekly_summary_list)
@@ -224,22 +218,29 @@ def run_report(store_key):
             .sort_values(by=['temp_date', '大类']) \
             .drop(columns=['temp_date'])
 
-        # Sheet 3: Product Quantity Detail
+        # Sheet 3: Product Quantity Detail (增加日期列排序逻辑)
         df_detail_raw = pd.DataFrame.from_dict(product_detail_data, orient='index').fillna(0).astype(int)
-        df_detail_raw.index = pd.to_datetime(df_detail_raw.index).strftime('%Y-%m-%d')
+        # 显式按照索引（即日期）进行排序
+        df_detail_raw.index = pd.to_datetime(df_detail_raw.index)
+        df_detail_raw = df_detail_raw.sort_index()
+        # 转回字符串格式并转置
+        df_detail_raw.index = df_detail_raw.index.strftime('%Y-%m-%d')
         df_detail = df_detail_raw.T
-        # --- 核心修改1：设置左上角表头为“产品名称” ---
         df_detail.index.name = '产品名称'
+        # 计算汇总行（排除表头，最后添加）
         df_detail.loc['汇总'] = df_detail.sum(axis=0)
 
-        # Sheet 4: Sample Statistics
+        # Sheet 4: Sample Statistics (增加日期列排序逻辑)
         if all_samples_collector:
             df_all_samples = pd.concat(all_samples_collector)
             df_sample_pivot = df_all_samples.pivot_table(index='Mapped Name', columns='日期', aggfunc='size',
                                                          fill_value=0)
-            df_sample_pivot.columns = pd.to_datetime(df_sample_pivot.columns).strftime('%Y-%m-%d')
+            # 对列名（日期）进行排序
+            sorted_cols = sorted(df_sample_pivot.columns, key=lambda x: pd.to_datetime(x))
+            df_sample_pivot = df_sample_pivot[sorted_cols]
+            # 格式化日期列名
+            df_sample_pivot.columns = [pd.to_datetime(c).strftime('%Y-%m-%d') for c in df_sample_pivot.columns]
             df_sample_pivot['总样品数'] = df_sample_pivot.sum(axis=1)
-            # --- 核心修改2：设置左上角表头为“产品名称” ---
             df_sample_pivot.index.name = '产品名称'
             df_sample_pivot = df_sample_pivot.sort_values(by='总样品数', ascending=False)
             df_sample_pivot.loc['汇总'] = df_sample_pivot.sum(axis=0)
@@ -247,12 +248,15 @@ def run_report(store_key):
             df_sample_pivot = pd.DataFrame([["无样品数据"]], columns=["提示"])
 
         try:
+            if not os.path.exists(os.path.dirname(output_filename)):
+                os.makedirs(os.path.dirname(output_filename))
+
             with pd.ExcelWriter(output_filename, engine='xlsxwriter') as writer:
                 df_final_weekly.to_excel(writer, sheet_name='Weekly Summary', index=False)
                 df_cat_summary.to_excel(writer, sheet_name='Category Aggregation', index=False)
                 df_detail.to_excel(writer, sheet_name='Product Quantity Detail', index=True)
                 df_sample_pivot.to_excel(writer, sheet_name='Sample Statistics', index=True)
-            print(f"✅ [{config['name_cn']}] 处理完成，Excel 表头已更正。")
+            print(f"✅ [{config['name_cn']}] 处理完成，数据已按日期线性排序。")
 
             if unrecognized_names:
                 print(f"💡 提醒：以下商品仍显示日文（未匹配简称）:")
