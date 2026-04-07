@@ -18,7 +18,7 @@ def map_sku(name):
     if 'Bluetooth 5.4ヘッドフォン' in name: return '屏显耳机'
     if '電働眉剃' in name: return '电动剃眉刀'
     if '車のサンバイ' in name: return '车载手机支架'
-    if '電働1台多用耳毛刀眉毛刀' in name: return '电动鼻毛刀'
+    if ('電働1台多用耳毛刀眉毛刀' in name) or ('耳毛 鼻毛切り' in name): return '电动鼻毛刀'
     if '3D風景ミ二チュア シ-ンコレクション' in name: return '剪影贴纸'
     if '高濃度のマグネシウム配合' in name: return '镁膏'
     if 'Taba ソフトストロ' in name: return '草莓捏捏乐'
