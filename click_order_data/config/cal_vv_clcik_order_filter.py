@@ -98,6 +98,7 @@ for file_name in file_list:
         if '充電を備えた3-in-1の多機能' in p: return '三合一充电器'
         if '改良版 Safe Slicer Plus' in p: return '切菜神器'
         if 'ANCノイズキャンセル' in p: return '屏显耳机'
+        if('美容液' in name) or ('290g' in name): return '头发护理精华'
         return '其他'
 
 
