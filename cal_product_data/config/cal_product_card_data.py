@@ -39,6 +39,9 @@ if not file_list:
 
 final_summary_data = []
 
+print(f"当前工作目录: {os.getcwd()}")
+print(f"预期输出目录: {os.path.abspath(output_base_dir)}")
+
 for file_name in file_list:
     file_path = os.path.join(current_directory, file_name)
     print(f"\n>>>> 正在处理: {file_name}")
@@ -50,75 +53,85 @@ for file_name in file_list:
         dates = re.findall(r'\d{4}[-/]\d{2}[-/]\d{2}', first_line)
         standard_date_range = f"{dates[0]} ~ {dates[1]}" if len(dates) >= 2 else "Unknown"
 
-        # B. 读取主数据 (header=2 锁定第3行为表头)
+        # B. 读取主数据
         df = pd.read_excel(file_path, header=2)
         df.columns = df.columns.astype(str).str.strip()
 
-        # C. 严格对应图片 D, F, G, J, K, L, M, N, O, P 列的关键字
+        # C. 锁定列名
         def find_col(keywords):
             for k in keywords:
                 for c in df.columns:
-                    if k in c: return c
+                    if k == c or k in c: return c
             return None
 
-        col_item   = find_col(['商品名称', 'Product Name'])        # B列
-        col_vv     = find_col(['曝光次数', 'Exposure'])            # D列
-        col_click  = find_col(['点击次数', 'Clicks count'])         # F列
-        col_order  = find_col(['SKU订单数', 'Orders'])             # G列
-        col_cart_c = find_col(['加车次数', 'Add to cart count'])    # J列
-        col_gmv    = find_col(['GMV'])                            # K列
-        col_v2o    = find_col(['曝光到成交转化率'])                  # L列
-        col_v2c    = find_col(['曝光到点击转化率'])                  # M列
-        col_c2cart = find_col(['点击到加车转化率'])                  # N列
-        col_c2o    = find_col(['点击到成交转化率'])                  # O列
-        col_cart2o = find_col(['加车到成交转化率'])                  # P列
+        col_item     = find_col(['商品', '商品名称', 'Product Name'])
+        col_vv       = find_col(['商品卡曝光次数'])
+        col_browse   = find_col(['商品卡的去重页面浏览次数'])
+        col_order    = find_col(['商品卡片商品成交件数'])
+        col_customer = find_col(['商品卡去重客户数'])
+        col_gmv      = find_col(['商品卡 GMV'])
+        col_v2c      = find_col(['商品卡点击率'])
+        col_v2o      = find_col(['商品卡转化率'])
 
         if not col_item:
             continue
 
-        # D. 数据清洗 (数值类)
-        num_cols = [col_vv, col_click, col_order, col_cart_c, col_gmv]
-        for col in num_cols:
-            if col: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        # D. 数据清洗函数
+        def clean_num(x):
+            if pd.isna(x): return 0
+            val = str(x).replace('円', '').replace(',', '').replace(' ', '').strip()
+            return pd.to_numeric(val, errors='coerce') or 0
 
-        # E. 数据清洗 (百分比类 L, M, N, O, P)
-        pct_cols = [col_v2o, col_v2c, col_c2cart, col_c2o, col_cart2o]
+        # E. 数值清洗 (扩展到所有数值列)
+        all_num_cols = [col_vv, col_browse, col_order, col_customer, col_gmv]
+        for col in all_num_cols:
+            if col: df[col] = df[col].apply(clean_num)
+
+        # F. 百分比清洗 (增加 strip 确保洁净)
+        pct_cols = [col_v2o, col_v2c]
         for col in pct_cols:
             if col:
-                df[col] = df[col].astype(str).str.replace('%', '', regex=False)
+                df[col] = df[col].astype(str).str.replace('%', '', regex=False).str.strip()
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0) / 100
 
-        # F. 映射分类
+        # G. 映射分类
         df['产品分类'] = df[col_item].apply(map_product)
 
-        # G. 汇总
+        # H. 汇总逻辑
         for category in TARGET_CATEGORIES:
             group = df[df['产品分类'] == category].copy()
             if group.empty: continue
+
+            print(f"   找到分类 [{category}]: {len(group)} 行数据")
+
+            # 计算平均率值 (保持你要求的逻辑)
+            avg_v2c = group[col_v2c].mean() if col_v2c else 0
+            avg_v2o = group[col_v2o].mean() if col_v2o else 0
 
             final_summary_data.append({
                 '源文件': file_name,
                 '日期范围': standard_date_range,
                 '产品分类': category,
-                '曝光次数(D)': int(group[col_vv].sum()),
-                '点击次数(F)': int(group[col_click].sum()),
-                'SKU订单数(G)': int(group[col_order].sum()),
-                '加车次数(J)': int(group[col_cart_c].sum()),
-                'GMV(K)': round(group[col_gmv].sum(), 2),
-                '曝光到成交转化率(L)': f"{group[col_v2o].mean() * 100:.2f}%",
-                '曝光到点击转化率(M)': f"{group[col_v2c].mean() * 100:.2f}%",
-                '点击到加车转化率(N)': f"{group[col_c2cart].mean() * 100:.2f}%",
-                '点击到成交转化率(O)': f"{group[col_c2o].mean() * 100:.2f}%",
-                '加车到成交转化率(P)': f"{group[col_cart2o].mean() * 100:.2f}%"
+                '曝光次数(AG)': int(group[col_vv].sum()),
+                '商品卡的去重页面浏览次数(AH)': int(group[col_browse].sum()) if col_browse else 0,
+                '商品卡片商品成交件数(AF)': int(group[col_order].sum()),
+                '商品卡去重客户数(AJ)': int(group[col_customer].sum()) if col_customer else 0,
+                'GMV(AE)': round(group[col_gmv].sum(), 2),
+                '商品卡点击率(AK)': f"{avg_v2c * 100:.2f}%",
+                '商品卡转化率(AL)': f"{avg_v2o * 100:.2f}%",
             })
 
     except Exception as e:
         print(f"❌ 出错: {e}")
 
-# --- 5. 导出 ---
+# --- 4. 导出 ---
 if final_summary_data:
     final_df = pd.DataFrame(final_summary_data)
     timestamp = datetime.now().strftime("%m%d%H%M")
-    output_name = f"产品汇总_全维度_{timestamp}.xlsx"
-    final_df.to_excel(os.path.join(output_base_dir, output_name), index=False)
-    print(f"\n🎉 报表生成成功，已包含 D 到 P 列所有红框指标。")
+    output_name = f"产品汇总_商品卡维度_{timestamp}.xlsx"
+    save_path = os.path.join(output_base_dir, output_name)
+    final_df.to_excel(save_path, index=False)
+    print(f"\n🎉 报表生成成功！")
+    print(f"📍 文件保存路径: {os.path.abspath(save_path)}")
+else:
+    print("\n❌ 警告：未匹配到任何指定产品的数据。")
