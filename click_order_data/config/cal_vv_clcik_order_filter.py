@@ -26,7 +26,7 @@ COLUMN_MAP = {
 
 # --- 2. 全局产品分类定义 ---
 TARGET_CATEGORIES = [
-    '精华液', '黑鸦片身体乳', '500ml身体乳A链', '500ml身体乳B链', '防晒霜',
+    '抗衰精华液', '黑鸦片身体乳', '500ml身体乳A链', '500ml身体乳B链', '防晒霜', '唇部精华',
     '车载手机支架', '电动修眉刀', '男士修鼻毛刀', '三合一充电器', '切菜神器', '屏显耳机'
 ]
 
@@ -87,7 +87,8 @@ for file_name in file_list:
     # --- 7. 产品映射逻辑 ---
     def map_product(product_name):
         p = str(product_name)
-        if 'Serum' in p: return '精华液'
+        if 'PDRN' in p: return '抗衰精华液'
+        if 'Serum môi' in p: return '唇部精华'
         if 'Black Opium' in p: return '黑鸦片身体乳'
         if 'Niacinamide' in p: return '500ml身体乳B链'
         if '500g' in p: return '500ml身体乳A链'
