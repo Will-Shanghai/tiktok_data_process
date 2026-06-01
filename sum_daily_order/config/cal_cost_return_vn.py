@@ -88,7 +88,7 @@ def run_vietnam_report(store_key):
             df = pd.read_csv(file_path)
             df.columns = df.columns.str.strip()
             # --- 修正点：将 .map 改为 .applymap 以兼容旧版本 ---
-            df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+            df = df.apply(lambda x: x.strip() if isinstance(x, str) else x)
 
             for col in [n_col, p_col, r_col]:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
