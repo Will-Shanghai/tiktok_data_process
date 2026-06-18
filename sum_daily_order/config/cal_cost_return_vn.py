@@ -17,7 +17,7 @@ sku_mapping = {
 
 category_mapping = {
     '身体乳单瓶': '身体乳', '身体乳双瓶': '身体乳', '身体乳三瓶': '身体乳',
-    '精华液单瓶': '精华液', '精华液双瓶': '精华液', '精华液三瓶': '精华液', '精华液&黑鸦片': '精华液',
+    '精华液单瓶': '精华液单瓶', '精华液双瓶': '精华液双瓶', '精华液三瓶': '精华液三瓶', '精华液&黑鸦片': '精华液&黑鸦片',
     '防晒霜单瓶': '防晒霜', '防晒霜双瓶': '防晒霜', '防晒霜三瓶': '防晒霜',
     '唇部精华单只': '唇部精华', '唇部精华双只': '唇部精华',
     '身体乳300ml单瓶': '身体乳300ml', '身体乳300ml双瓶': '身体乳300ml', '身体乳300ml三瓶': '身体乳300ml',
@@ -30,6 +30,7 @@ SORT_ORDER_LIST = ['身体乳300ml单瓶', '身体乳300ml双瓶', '身体乳300
 
 # -----------------------
 # 2. 店铺差异化配置
+
 # -----------------------
 # 产品成本
 common_cost = {
@@ -88,7 +89,7 @@ def run_vietnam_report(store_key):
             df = pd.read_csv(file_path)
             df.columns = df.columns.str.strip()
             # --- 修正点：将 .map 改为 .applymap 以兼容旧版本 ---
-            df = df.apply(lambda x: x.strip() if isinstance(x, str) else x)
+            df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
 
             for col in [n_col, p_col, r_col]:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
