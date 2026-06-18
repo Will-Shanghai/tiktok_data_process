@@ -52,9 +52,9 @@ common_sample_cost = {
 
 STORE_CONFIG = {
     'local': {'cn_name': '本土店', 'cost': common_cost, 'logistics': common_logistics, 'sample': common_sample_cost,
-              'exchange_rate': 3600},
+              'exchange_rate': 3883},
     'cross_border': {'cn_name': '跨境店', 'cost': common_cost, 'logistics': common_logistics,
-                     'sample': common_sample_cost, 'exchange_rate': 3600}
+                     'sample': common_sample_cost, 'exchange_rate': 3883}
 }
 
 
