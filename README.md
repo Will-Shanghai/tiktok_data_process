@@ -144,7 +144,7 @@ sum_daily_order/data/data_VN/cross_border/
 config/cache/
 ```
 
-如果需要在线刷新飞书配置，请在 `config/.env` 中配置：
+如果需要在线刷新飞书配置，请在 `config/.env` 中配置飞书应用凭证：
 
 ```text
 FEISHU_APP_ID=你的飞书应用ID
@@ -152,6 +152,19 @@ FEISHU_APP_SECRET=你的飞书应用Secret
 ```
 
 如果没有 `.env`，但 `config/cache/` 中已有对应配置缓存，程序仍可以运行。
+
+`.env` 是密钥文件，不要提交到 Git，不要写进代码，也不要发到公开群。  
+如果是公司内部固定工具包，可以由打包/交付的人把 `.env` 放进交付目录：
+
+```text
+TikTokDailyReport/
+├── TikTokDailyReport.exe
+└── config/
+    ├── .env
+    └── app_config.xlsx
+```
+
+这样同事双击 exe 时会自动读取，不需要每次手动配置。
 
 ## Windows 打包
 
@@ -242,6 +255,29 @@ dist/config/app_config.xlsx
 sum_daily_order/config/cache/
 ```
 
+如果你希望同事每次运行都能在线读取飞书配置，也可以把本机的：
+
+```text
+sum_daily_order/config/.env
+```
+
+复制到：
+
+```text
+dist/config/.env
+```
+
+注意：`.env` 里是飞书应用密钥，不建议打进 exe，也不要提交到 Git。把它作为交付包里的外部配置文件即可；同事不需要每次重新填写。
+
+注意：`app_config.xlsx` 只是“运行哪些国家/店铺”的配置；SKU 成本、物流成本、寄样成本来自飞书配置表或本地缓存。  
+如果 exe 目录下没有 `config/.env`，就必须准备：
+
+```text
+dist/config/cache/
+```
+
+否则程序会提示无法读取 SKU 成本配置。
+
 订单 CSV 不建议随 exe 打包，日常使用时直接放到 `dist/data/` 下对应店铺目录。
 
 最终同事只需要：
@@ -304,6 +340,24 @@ config/.env
 ```
 
 如果只是给普通同事使用，可以提前准备好 `config/cache/`，让程序使用本地缓存。
+
+打包后对应路径是：
+
+```text
+dist/config/cache/
+```
+
+也就是把源码里的：
+
+```text
+sum_daily_order/config/cache/
+```
+
+整个复制到：
+
+```text
+dist/config/cache/
+```
 
 ### pip install 最后出现一大段 Traceback
 

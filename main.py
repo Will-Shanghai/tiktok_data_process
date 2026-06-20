@@ -192,6 +192,37 @@ def split_stores_by_site(stores):
     return grouped
 
 
+def has_feishu_env():
+    env_file = APP_ROOT / "config" / ".env"
+    if env_file.exists():
+        return True
+    return bool(os.getenv("FEISHU_APP_ID") and os.getenv("FEISHU_APP_SECRET"))
+
+
+def cache_file_for_sheet(sheet_name):
+    safe_name = str(sheet_name).replace(" ", "_").replace("/", "_")
+    return APP_ROOT / "config" / "cache" / f"config_{safe_name}.csv"
+
+
+def check_config_sources(stores):
+    """Give packaged users a clear fix when neither Feishu env nor cache exists."""
+    if has_feishu_env():
+        return
+
+    missing = [store["sheet_name"] for store in stores if not cache_file_for_sheet(store["sheet_name"]).exists()]
+    if not missing:
+        return
+
+    missing_text = "\n".join(f"   - {name}" for name in missing)
+    raise RuntimeError(
+        "当前没有配置飞书凭证，也缺少本地配置缓存，无法读取 SKU 成本配置。\n"
+        f"缺少缓存的 Sheet:\n{missing_text}\n\n"
+        "解决办法二选一：\n"
+        "1. 把源码里的 sum_daily_order/config/cache 文件夹复制到 exe 同级的 config/cache；\n"
+        "2. 在 exe 同级的 config/.env 中配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET。"
+    )
+
+
 def run(site):
     ensure_runtime_dirs()
 
@@ -205,6 +236,13 @@ def run(site):
         selected_sites = ["JP", "VN"]
     else:
         selected_sites = [normalize_country_code(site)]
+
+    enabled_stores = [
+        store
+        for site_code in selected_sites
+        for store in grouped.get(site_code, [])
+    ]
+    check_config_sources(enabled_stores)
 
     if "JP" in selected_sites:
         if grouped["JP"]:
