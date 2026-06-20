@@ -19,6 +19,13 @@ from dotenv import load_dotenv
 
 def find_project_root(start_dir):
     """向上查找 sum_daily_order 根目录，避免依赖固定绝对路径。"""
+    env_root = os.getenv("TIKTOK_REPORT_ROOT")
+    if env_root:
+        root = os.path.abspath(env_root)
+        for name in ("config", "data", "result"):
+            os.makedirs(os.path.join(root, name), exist_ok=True)
+        return root
+
     current = os.path.abspath(start_dir)
     while True:
         if all(os.path.isdir(os.path.join(current, name)) for name in ("config", "data", "result")):
@@ -34,14 +41,10 @@ def find_project_root(start_dir):
 # ============================================================
 CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = find_project_root(CURRENT_SCRIPT_DIR)
-if os.path.basename(CURRENT_SCRIPT_DIR) == "new":
-    NEW_CONFIG_DIR = CURRENT_SCRIPT_DIR
-else:
-    NEW_CONFIG_DIR = os.path.join(CURRENT_SCRIPT_DIR, "new")
 
 for env_path in [
+    os.path.join(PROJECT_ROOT, "config", ".env"),
     os.path.join(CURRENT_SCRIPT_DIR, ".env"),
-    os.path.join(NEW_CONFIG_DIR, ".env"),
 ]:
     if os.path.exists(env_path):
         load_dotenv(env_path)
@@ -49,12 +52,6 @@ load_dotenv()
 
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
-
-if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-    raise EnvironmentError(
-        "❌ 请配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET。\n"
-        "当前脚本会优先读取 sum_daily_order/config/.env 或 sum_daily_order/config/new/.env。"
-    )
 
 FEISHU_SHEET_TOKEN = "G3HCsMq7UhSjIptrTI5c0dUnnyh"
 FEISHU_RANGE_SKU = "A:E"
@@ -64,7 +61,7 @@ FEISHU_REQUIRED_SCOPE_HINT = "请在飞书开放平台给应用开通 sheets:spr
 VIETNAM_EXCHANGE_RATE = 1 / 3883
 
 SKU_ID_COLUMN = "SKU ID"
-CACHE_DIR = os.path.join(NEW_CONFIG_DIR if os.path.isdir(NEW_CONFIG_DIR) else CURRENT_SCRIPT_DIR, "cache")
+CACHE_DIR = os.path.join(PROJECT_ROOT, "config", "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_EXPIRY_HOURS = 24
 USE_CONFIG_CACHE_FIRST = os.getenv("USE_CONFIG_CACHE_FIRST", "").lower() in {"1", "true", "yes", "y"}
@@ -241,6 +238,10 @@ def get_config_dataframe(sheet_name, force_refresh=False):
             print(f"   ⚠️ 缓存读取失败: {e}，尝试刷新")
 
     try:
+        if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+            raise EnvironmentError(
+                "未配置 FEISHU_APP_ID/FEISHU_APP_SECRET，无法从飞书刷新配置。"
+            )
         token = get_feishu_token(FEISHU_APP_ID, FEISHU_APP_SECRET)
         df = read_feishu_sheet(token, FEISHU_SHEET_TOKEN, sheet_name, FEISHU_RANGE_SKU)
         df = df.dropna(how="all")
@@ -827,16 +828,14 @@ def run_report(store_config, config_df, exchange_rate):
         print(f"❌ [{display_name}] 保存失败: {e}")
 
 
-# ============================================================
-# 4. 主程序
-# ============================================================
-if __name__ == "__main__":
+def run_vietnam_daily(stores=None):
+    """运行越南日报。stores 为空时使用脚本内置 VIETNAM_STORES。"""
     print("=" * 60)
     print("TikTok 越南周报生成工具")
     print("=" * 60)
     print(f"✅ 使用固定越南汇率: {VIETNAM_EXCHANGE_RATE}")
 
-    for store in VIETNAM_STORES:
+    for store in (stores or VIETNAM_STORES):
         if not store.get("enabled", True):
             continue
 
@@ -857,3 +856,10 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("✨ 越南站所有店铺处理完毕。")
     print("=" * 60)
+
+
+# ============================================================
+# 4. 主程序
+# ============================================================
+if __name__ == "__main__":
+    run_vietnam_daily()

@@ -28,6 +28,13 @@ from dotenv import load_dotenv
 
 def find_project_root(start_dir):
     """向上查找 sum_daily_order 根目录，避免依赖固定绝对路径。"""
+    env_root = os.getenv("TIKTOK_REPORT_ROOT")
+    if env_root:
+        root = os.path.abspath(env_root)
+        for name in ("config", "data", "result"):
+            os.makedirs(os.path.join(root, name), exist_ok=True)
+        return root
+
     current = os.path.abspath(start_dir)
     while True:
         if all(os.path.isdir(os.path.join(current, name)) for name in ("config", "data", "result")):
@@ -40,17 +47,20 @@ def find_project_root(start_dir):
 # ============================================================
 # 0. 加载环境变量（.env 文件）
 # ============================================================
+CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = find_project_root(CURRENT_SCRIPT_DIR)
+
+for env_path in [
+    os.path.join(PROJECT_ROOT, "config", ".env"),
+    os.path.join(CURRENT_SCRIPT_DIR, ".env"),
+]:
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
 load_dotenv()
 
 # -------- 飞书应用凭证（必须配置在 .env 中）--------
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
-
-if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-    raise EnvironmentError(
-        "❌ 请在项目根目录创建 .env 文件，并配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET。\n"
-        "可以参考 .env.example 模板。"
-    )
 
 # -------- 飞书表格信息 --------
 FEISHU_SHEET_TOKEN = "G3HCsMq7UhSjIptrTI5c0dUnnyh"
@@ -64,7 +74,7 @@ JAPAN_EXCHANGE_RATE = 0.042336
 SKU_ID_COLUMN = "SKU ID"   # 订单 CSV 中的 SKU ID 列名
 
 # -------- 本地缓存目录 --------
-CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+CACHE_DIR = os.path.join(PROJECT_ROOT, "config", "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_EXPIRY_HOURS = 24   # 缓存有效期（小时）
 USE_CONFIG_CACHE_FIRST = os.getenv("USE_CONFIG_CACHE_FIRST", "").lower() in {"1", "true", "yes", "y"}
@@ -252,6 +262,10 @@ def get_config_dataframe(sheet_name, force_refresh=False):
             print(f"   ⚠️ 缓存读取失败: {e}，尝试刷新")
 
     try:
+        if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+            raise EnvironmentError(
+                "未配置 FEISHU_APP_ID/FEISHU_APP_SECRET，无法从飞书刷新配置。"
+            )
         token = get_feishu_token(FEISHU_APP_ID, FEISHU_APP_SECRET)
         df = read_feishu_sheet(token, FEISHU_SHEET_TOKEN, sheet_name, FEISHU_RANGE_SKU)
         df = df.dropna(how='all')
@@ -478,11 +492,9 @@ def run_report(combo, config_df, exchange_rate):
     logistics_col = "物流成本(元)"
     sample_cost_col = "寄样成本(元)"
 
-    current_script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = find_project_root(current_script_dir)
-    folder_path = os.path.normpath(os.path.join(project_root, 'data', f'data_{country_code.upper()}', store_dir))
+    folder_path = os.path.normpath(os.path.join(PROJECT_ROOT, 'data', f'data_{country_code.upper()}', store_dir))
     output_filename = os.path.normpath(
-        os.path.join(project_root, f'result/Daily_Performance_Report_{country_code.upper()}_{store_key}.xlsx'))
+        os.path.join(PROJECT_ROOT, f'result/Daily_Performance_Report_{country_code.upper()}_{store_key}.xlsx'))
 
     file_list = glob.glob(os.path.join(folder_path, '*.csv'))
     if not file_list:
@@ -788,11 +800,8 @@ def run_report(combo, config_df, exchange_rate):
     except Exception as e:
         print(f"❌ [{display_name}] 保存失败: {e}")
 
-# ============================================================
-# 4. 主程序
-# ============================================================
-
-if __name__ == "__main__":
+def run_japan_daily(stores=None):
+    """运行日本日报。stores 为空时使用脚本内置 JAPAN_STORES。"""
     print("=" * 60)
     print("TikTok 日本按日汇总订单成本报表工具")
     print("=" * 60)
@@ -801,7 +810,7 @@ if __name__ == "__main__":
     print(f"✅ 使用固定日本汇率: {exchange_rate}")
 
     # 遍历日本店铺组合
-    for combo in JAPAN_STORES:
+    for combo in (stores or JAPAN_STORES):
         if not combo.get("enabled", True):
             continue
 
@@ -821,3 +830,10 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("✨ 所有任务执行完毕。")
     print("=" * 60)
+
+# ============================================================
+# 4. 主程序
+# ============================================================
+
+if __name__ == "__main__":
+    run_japan_daily()

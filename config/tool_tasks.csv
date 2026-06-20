@@ -1,0 +1,6 @@
+enabled,task_id,task_name,script_path,workdir
+1,ads,计算广告数据,cal_ads_data/config/ads_statistics.py,cal_ads_data/config
+1,product_card,计算商品卡数据,cal_product_data/config/cal_product_card_data.py,cal_product_data/config
+1,click_order,计算达人点击订单数据,click_order_data/config/cal_vv_clcik_order_filter.py,click_order_data/config
+1,daily_order,汇总日本每日订单,sum_daily_order/config/cal_cost_return_jp_daily.py,sum_daily_order/config
+1,daily_order_vn,汇总越南每日订单,sum_daily_order/config/cal_cost_return_vn_daily.py,sum_daily_order/config
