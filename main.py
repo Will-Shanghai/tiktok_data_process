@@ -14,8 +14,66 @@ from pathlib import Path
 import pandas as pd
 
 
+DEFAULT_STORES = [
+    {
+        "enabled": 1,
+        "country_code": "JP",
+        "country_name": "日本",
+        "store_key": "local",
+        "store_name": "本土店",
+        "store_dir": "local",
+        "sheet_name": "日本_本土店",
+        "说明": "1=启用，0=不运行",
+    },
+    {
+        "enabled": 1,
+        "country_code": "JP",
+        "country_name": "日本",
+        "store_key": "cross-border",
+        "store_name": "跨境店",
+        "store_dir": "cross-border",
+        "sheet_name": "日本_跨境店",
+        "说明": "日本跨境目录名为 cross-border",
+    },
+    {
+        "enabled": 1,
+        "country_code": "JP",
+        "country_name": "日本",
+        "store_key": "direct",
+        "store_name": "直邮店",
+        "store_dir": "direct",
+        "sheet_name": "日本_直邮店",
+        "说明": "",
+    },
+    {
+        "enabled": 1,
+        "country_code": "VN",
+        "country_name": "越南",
+        "store_key": "local",
+        "store_name": "本土店",
+        "store_dir": "local",
+        "sheet_name": "越南_本土店",
+        "说明": "",
+    },
+    {
+        "enabled": 1,
+        "country_code": "VN",
+        "country_name": "越南",
+        "store_key": "cross_border",
+        "store_name": "跨境店",
+        "store_dir": "cross_border",
+        "sheet_name": "越南_跨境店",
+        "说明": "越南跨境目录名为 cross_border",
+    },
+]
+
+
 def get_runtime_root():
     """Return the folder that contains config/data/result for this run."""
+    env_root = os.getenv("TIKTOK_REPORT_ROOT")
+    if env_root:
+        return Path(env_root).resolve()
+
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
 
@@ -33,6 +91,38 @@ CONFIG_PATH = APP_ROOT / "config" / "app_config.xlsx"
 def ensure_runtime_dirs():
     for folder in ["config", "data", "result"]:
         (APP_ROOT / folder).mkdir(parents=True, exist_ok=True)
+    for folder in [
+        "data/data_JP/local",
+        "data/data_JP/cross-border",
+        "data/data_JP/direct",
+        "data/data_VN/local",
+        "data/data_VN/cross_border",
+        "config/cache",
+    ]:
+        (APP_ROOT / folder).mkdir(parents=True, exist_ok=True)
+
+
+def create_default_app_config():
+    """Create config/app_config.xlsx when a packaged user has not copied one yet."""
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    stores_df = pd.DataFrame(DEFAULT_STORES)
+    notes_df = pd.DataFrame(
+        [
+            ["enabled", "1 表示运行，0 表示跳过。"],
+            ["country_code", "JP=日本，VN=越南。"],
+            ["store_key", "输出文件名使用，例如 Daily_Performance_Report_JP_direct.xlsx。"],
+            ["store_dir", "订单 CSV 所在目录名，例如 data/data_JP/direct。"],
+            ["sheet_name", "飞书配置表 Sheet 名称。"],
+        ],
+        columns=["字段", "说明"],
+    )
+
+    with pd.ExcelWriter(CONFIG_PATH, engine="openpyxl") as writer:
+        stores_df.to_excel(writer, sheet_name="Stores", index=False)
+        notes_df.to_excel(writer, sheet_name="README", index=False)
+
+    print(f"⚠️ 未找到配置文件，已自动生成默认配置: {CONFIG_PATH}")
+    print("   请按需修改 config/app_config.xlsx 的 enabled 列。")
 
 
 def parse_enabled(value):
@@ -50,10 +140,7 @@ def normalize_country_code(value):
 
 def load_app_config():
     if not CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"未找到配置文件: {CONFIG_PATH}\n"
-            "请确认 config/app_config.xlsx 与程序在同一个工具目录下。"
-        )
+        create_default_app_config()
 
     df = pd.read_excel(CONFIG_PATH, sheet_name="Stores", dtype=str).fillna("")
     required_cols = [
