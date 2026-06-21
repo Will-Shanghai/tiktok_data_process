@@ -251,7 +251,10 @@ def run(site):
     ensure_runtime_dirs()
 
     os.environ["TIKTOK_REPORT_ROOT"] = str(APP_ROOT)
-    os.environ.setdefault("USE_CONFIG_CACHE_FIRST", "1")
+    if has_feishu_env():
+        os.environ["USE_CONFIG_CACHE_FIRST"] = "0"
+    else:
+        os.environ.setdefault("USE_CONFIG_CACHE_FIRST", "1")
 
     stores = load_app_config()
     grouped = split_stores_by_site(stores)

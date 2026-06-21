@@ -183,6 +183,11 @@ TikTokDailyReport/
 
 这样同事双击 exe 时会自动读取，不需要每次手动配置。
 
+运行时规则：
+
+- 有 `config/.env` 时，程序会优先从飞书刷新配置，并更新本地 `config/cache/`。
+- 没有 `config/.env` 时，程序会使用 `config/cache/` 离线运行。
+
 ## Windows 打包
 
 建议在 Windows 电脑上打包。PyInstaller 不是跨平台编译器，所以 Windows exe 最好在 Windows 上生成。
