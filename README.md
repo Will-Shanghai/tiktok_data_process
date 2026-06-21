@@ -148,10 +148,12 @@ sum_daily_order/data/data_MX/direct/
 
 一个目录下可以放多个 CSV。程序会：
 
-- 汇总所有 CSV 生成总览日报
+- 按 CSV 文件和日期生成日报汇总，避免多个文件日期重叠时重复混算
 - 按 CSV 文件生成周期对比
 - 在 `Daily Product Detail` 顶部生成按文件+产品的 GMV、成本、利润汇总
 - 在 `Product Quantity Matrix` 顶部生成按文件+产品的销量汇总
+- 在 `Product Quantity Matrix` 下方生成 `文件名 + 产品名称 + 日期` 的每日销量矩阵
+- 在 `Sample Statistics` 中生成 `文件名 + 产品名称 + 日期` 的每日样品单矩阵
 
 ## 飞书配置
 

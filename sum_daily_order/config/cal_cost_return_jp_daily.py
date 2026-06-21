@@ -678,7 +678,7 @@ def run_report(combo, config_df, exchange_rate):
 
     # Sheet1: Daily Summary
     df_daily_product = pd.DataFrame(daily_product_detail_list)
-    df_daily_summary = df_daily_product.groupby('日期').agg({
+    df_daily_summary = df_daily_product.groupby(['文件名', '日期']).agg({
         '销量': 'sum',
         '销售额': 'sum',
         '汇率后金额': 'sum',
@@ -689,22 +689,24 @@ def run_report(combo, config_df, exchange_rate):
         '寄样支出': 'sum'
     }).reset_index()
     if daily_order_records:
-        df_order_count = pd.DataFrame(daily_order_records).drop_duplicates().groupby('日期')['Order ID'].count().reset_index()
+        df_order_count = pd.DataFrame(daily_order_records) \
+            .drop_duplicates(subset=['文件名', '日期', 'Order ID']) \
+            .groupby(['文件名', '日期'])['Order ID'].count().reset_index()
         df_order_count.rename(columns={'Order ID': '订单数'}, inplace=True)
     else:
-        df_order_count = df_daily_product[df_daily_product['销量'] > 0].groupby('日期')['销量'].sum().reset_index()
+        df_order_count = df_daily_product[df_daily_product['销量'] > 0].groupby(['文件名', '日期'])['销量'].sum().reset_index()
         df_order_count.rename(columns={'销量': '订单数'}, inplace=True)
-    df_daily_summary = df_daily_summary.merge(df_order_count, on='日期', how='left')
+    df_daily_summary = df_daily_summary.merge(df_order_count, on=['文件名', '日期'], how='left')
     df_daily_summary['订单数'] = df_daily_summary['订单数'].fillna(0).astype(int)
     df_daily_summary = df_daily_summary[[
-        '日期', '订单数', '销量', '寄样数', '销售额', '汇率后金额', 'P列折后价', '产品成本', '物流成本', '寄样支出'
+        '文件名', '日期', '订单数', '销量', '寄样数', '销售额', '汇率后金额', 'P列折后价', '产品成本', '物流成本', '寄样支出'
     ]]
     df_daily_summary = df_daily_summary.assign(temp_date=pd.to_datetime(df_daily_summary['日期'])) \
-        .sort_values('temp_date') \
+        .sort_values(['文件名', 'temp_date']) \
         .drop(columns=['temp_date'])
-    total_row = {'日期': '汇总'}
+    total_row = {'文件名': '全部文件合计', '日期': '汇总'}
     for col in df_daily_summary.columns:
-        if col != '日期':
+        if col not in ['文件名', '日期']:
             total_row[col] = df_daily_summary[col].sum()
     df_daily_summary = pd.concat([df_daily_summary, pd.DataFrame([total_row])], ignore_index=True)
 
@@ -724,7 +726,7 @@ def run_report(combo, config_df, exchange_rate):
     df_quantity_records = pd.DataFrame(product_quantity_records)
     if not df_quantity_records.empty:
         df_quantity_matrix = df_quantity_records.pivot_table(
-            index='产品名称',
+            index=['文件名', '产品名称'],
             columns='日期',
             values='销量',
             aggfunc='sum',
@@ -733,7 +735,9 @@ def run_report(combo, config_df, exchange_rate):
         sorted_cols = sorted(df_quantity_matrix.columns, key=lambda x: pd.to_datetime(x))
         df_quantity_matrix = df_quantity_matrix[sorted_cols]
         df_quantity_matrix['汇总'] = df_quantity_matrix.sum(axis=1)
-        df_quantity_matrix.loc['汇总'] = df_quantity_matrix.sum(axis=0)
+        total_row = df_quantity_matrix.sum(axis=0).to_frame().T
+        total_row.index = pd.MultiIndex.from_tuples([('全部文件合计', '汇总')], names=df_quantity_matrix.index.names)
+        df_quantity_matrix = pd.concat([df_quantity_matrix, total_row]).reset_index()
     else:
         df_quantity_matrix = pd.DataFrame([["无销量数据"]], columns=["提示"])
 
@@ -741,7 +745,7 @@ def run_report(combo, config_df, exchange_rate):
     df_sample_records = pd.DataFrame(sample_quantity_records)
     if not df_sample_records.empty:
         df_sample_matrix = df_sample_records.pivot_table(
-            index='产品名称',
+            index=['文件名', '产品名称'],
             columns='日期',
             values='寄样数',
             aggfunc='sum',
@@ -750,7 +754,9 @@ def run_report(combo, config_df, exchange_rate):
         sorted_cols = sorted(df_sample_matrix.columns, key=lambda x: pd.to_datetime(x))
         df_sample_matrix = df_sample_matrix[sorted_cols]
         df_sample_matrix['汇总'] = df_sample_matrix.sum(axis=1)
-        df_sample_matrix.loc['汇总'] = df_sample_matrix.sum(axis=0)
+        total_row = df_sample_matrix.sum(axis=0).to_frame().T
+        total_row.index = pd.MultiIndex.from_tuples([('全部文件合计', '汇总')], names=df_sample_matrix.index.names)
+        df_sample_matrix = pd.concat([df_sample_matrix, total_row]).reset_index()
     else:
         df_sample_matrix = pd.DataFrame([["无样品数据"]], columns=["提示"])
 
@@ -773,13 +779,13 @@ def run_report(combo, config_df, exchange_rate):
             quantity_sheet = 'Product Quantity Matrix'
             df_product_quantity_by_period.to_excel(writer, sheet_name=quantity_sheet, index=True)
             quantity_startrow = len(df_product_quantity_by_period) + 3
-            df_quantity_matrix.to_excel(writer, sheet_name=quantity_sheet, startrow=quantity_startrow, index=True)
+            df_quantity_matrix.to_excel(writer, sheet_name=quantity_sheet, startrow=quantity_startrow, index=False)
             quantity_rows = quantity_startrow + len(df_quantity_matrix) + 1
-            quantity_cols = max(len(df_product_quantity_by_period.columns) + 1, len(df_quantity_matrix.columns) + 1)
+            quantity_cols = max(len(df_product_quantity_by_period.columns) + 1, len(df_quantity_matrix.columns))
             center_excel_sheet(writer, quantity_sheet, quantity_rows, quantity_cols)
 
-            df_sample_matrix.to_excel(writer, sheet_name='Sample Statistics', index=True)
-            center_excel_sheet(writer, 'Sample Statistics', len(df_sample_matrix) + 1, len(df_sample_matrix.columns) + 1)
+            df_sample_matrix.to_excel(writer, sheet_name='Sample Statistics', index=False)
+            center_excel_sheet(writer, 'Sample Statistics', len(df_sample_matrix) + 1, len(df_sample_matrix.columns))
 
             if period_comparison_frames:
                 startrow = 0
