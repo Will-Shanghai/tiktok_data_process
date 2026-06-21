@@ -6,6 +6,8 @@
 - 越南站日报：`sum_daily_order/config/cal_cost_return_vn_daily.py`
 - 打包友好的统一入口：`main.py`
 
+墨西哥站目录和配置已预留，本土店/直邮店默认不启用；待墨西哥日报脚本接入后再开启。
+
 ## 目录结构
 
 源码运行时主要使用：
@@ -24,6 +26,9 @@ sum_daily_order/
 │   └── data_VN/
 │       ├── local/
 │       └── cross_border/
+│   └── data_MX/
+│       ├── local/
+│       └── direct/
 └── result/                      # 报表输出目录
 ```
 
@@ -44,6 +49,9 @@ TikTokDailyReport/
 │   └── data_VN/
 │       ├── local/
 │       └── cross_border/
+│   └── data_MX/
+│       ├── local/
+│       └── direct/
 └── result/
 ```
 
@@ -65,7 +73,7 @@ TikTokDailyReport/config/app_config.xlsx
 
 ```text
 enabled       1=启用，0=跳过
-country_code  JP=日本，VN=越南
+country_code  JP=日本，VN=越南，MX=墨西哥
 country_name  中文国家名
 store_key     输出文件名使用
 store_name    中文店铺名
@@ -128,6 +136,15 @@ sum_daily_order/data/data_JP/direct/
 ```text
 sum_daily_order/data/data_VN/cross_border/
 ```
+
+墨西哥目录已预留：
+
+```text
+sum_daily_order/data/data_MX/local/
+sum_daily_order/data/data_MX/direct/
+```
+
+注意：墨西哥店铺在 `app_config.xlsx` 中默认 `enabled=0`，目前不会运行日报计算。
 
 一个目录下可以放多个 CSV。程序会：
 

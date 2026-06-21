@@ -65,6 +65,26 @@ DEFAULT_STORES = [
         "sheet_name": "越南_跨境店",
         "说明": "越南跨境目录名为 cross_border",
     },
+    {
+        "enabled": 0,
+        "country_code": "MX",
+        "country_name": "墨西哥",
+        "store_key": "local",
+        "store_name": "本土店",
+        "store_dir": "local",
+        "sheet_name": "墨西哥_本土店",
+        "说明": "目录已预留；墨西哥日报脚本接入后再启用",
+    },
+    {
+        "enabled": 0,
+        "country_code": "MX",
+        "country_name": "墨西哥",
+        "store_key": "direct",
+        "store_name": "直邮店",
+        "store_dir": "direct",
+        "sheet_name": "墨西哥_直邮店",
+        "说明": "目录已预留；墨西哥日报脚本接入后再启用",
+    },
 ]
 
 
@@ -97,6 +117,8 @@ def ensure_runtime_dirs():
         "data/data_JP/direct",
         "data/data_VN/local",
         "data/data_VN/cross_border",
+        "data/data_MX/local",
+        "data/data_MX/direct",
         "config/cache",
     ]:
         (APP_ROOT / folder).mkdir(parents=True, exist_ok=True)
@@ -109,7 +131,7 @@ def create_default_app_config():
     notes_df = pd.DataFrame(
         [
             ["enabled", "1 表示运行，0 表示跳过。"],
-            ["country_code", "JP=日本，VN=越南。"],
+            ["country_code", "JP=日本，VN=越南，MX=墨西哥。"],
             ["store_key", "输出文件名使用，例如 Daily_Performance_Report_JP_direct.xlsx。"],
             ["store_dir", "订单 CSV 所在目录名，例如 data/data_JP/direct。"],
             ["sheet_name", "飞书配置表 Sheet 名称。"],
@@ -134,6 +156,7 @@ def normalize_country_code(value):
     aliases = {
         "日本": "JP",
         "越南": "VN",
+        "墨西哥": "MX",
     }
     return aliases.get(value, value)
 
@@ -178,13 +201,14 @@ def choose_site():
     print("\n请选择要运行的站点：")
     print("1. 日本 JP")
     print("2. 越南 VN")
-    print("3. 全部 all")
+    print("3. 墨西哥 MX（目录已预留，日报脚本接入后使用）")
+    print("4. 全部 all")
     choice = input("请输入数字后回车: ").strip()
-    return {"1": "JP", "2": "VN", "3": "all"}.get(choice, "")
+    return {"1": "JP", "2": "VN", "3": "MX", "4": "all"}.get(choice, "")
 
 
 def split_stores_by_site(stores):
-    grouped = {"JP": [], "VN": []}
+    grouped = {"JP": [], "VN": [], "MX": []}
     for store in stores:
         country_code = normalize_country_code(store["country_code"])
         if country_code in grouped:
@@ -240,6 +264,7 @@ def run(site):
     enabled_stores = [
         store
         for site_code in selected_sites
+        if site_code in {"JP", "VN"}
         for store in grouped.get(site_code, [])
     ]
     check_config_sources(enabled_stores)
@@ -260,10 +285,13 @@ def run(site):
         else:
             print("⚠️ app_config.xlsx 中没有启用的越南店铺，已跳过。")
 
+    if "MX" in selected_sites:
+        print("⚠️ 墨西哥目录和配置已预留，但墨西哥日报脚本尚未接入，暂不运行。")
+
 
 def main():
     parser = argparse.ArgumentParser(description="TikTok Shop daily report launcher")
-    parser.add_argument("--site", choices=["JP", "VN", "all"], help="直接运行指定站点")
+    parser.add_argument("--site", choices=["JP", "VN", "MX", "all"], help="直接运行指定站点")
     parser.add_argument("--list", action="store_true", help="列出 app_config.xlsx 中启用的店铺")
     args = parser.parse_args()
 
@@ -284,7 +312,7 @@ def main():
             return
 
         site = args.site or choose_site()
-        if site not in {"JP", "VN", "all"}:
+        if site not in {"JP", "VN", "MX", "all"}:
             print("未选择有效站点，程序结束。")
             return
         run(site)
