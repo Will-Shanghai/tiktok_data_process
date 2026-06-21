@@ -36,7 +36,7 @@ Windows 打包后，建议给同事的目录结构是：
 
 ```text
 TikTokDailyReport/
-├── TikTokDailyReport.exe
+├── TikTokDailyReport_v1.1.0.exe
 ├── config/
 │   ├── app_config.xlsx
 │   ├── .env                     # 需要在线读取飞书时才放
@@ -175,7 +175,7 @@ FEISHU_APP_SECRET=你的飞书应用Secret
 
 ```text
 TikTokDailyReport/
-├── TikTokDailyReport.exe
+├── TikTokDailyReport_v1.1.0.exe
 └── config/
     ├── .env
     └── app_config.xlsx
@@ -222,7 +222,7 @@ py -3.11 --version
 Python 3.11.9
 ```
 
-注意：只有“打包 exe 的电脑”需要安装 Python。最终拿到 `TikTokDailyReport.exe` 的普通同事不需要安装 Python。
+注意：只有“打包 exe 的电脑”需要安装 Python。最终拿到 `TikTokDailyReport_v1.1.0.exe` 的普通同事不需要安装 Python。
 
 下面说的“项目文件夹根目录”，指的是你解压/拉取代码后的这个文件夹，例如：
 
@@ -244,20 +244,20 @@ cd /d C:\Users\MAC\Desktop\tiktok_data_process
 py -3.11 -m venv .venv
 .venv\Scripts\activate
 pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
-pyinstaller --onefile --name TikTokDailyReport main.py
+pyinstaller --onefile --name TikTokDailyReport_v1.1.0 main.py
 ```
 
 打包完成后，exe 通常在：
 
 ```text
-dist/TikTokDailyReport.exe
+dist/TikTokDailyReport_v1.1.0.exe
 ```
 
 然后在 `dist` 里补齐外部目录：
 
 ```text
 dist/
-├── TikTokDailyReport.exe
+├── TikTokDailyReport_v1.1.0.exe
 ├── config/
 ├── data/
 └── result/
@@ -305,7 +305,7 @@ dist/config/cache/
 最终同事只需要：
 
 1. 把订单 CSV 放进对应 `data` 子目录。
-2. 双击 `TikTokDailyReport.exe`。
+2. 双击 `TikTokDailyReport_v1.1.0.exe`。
 3. 按菜单选择日本、越南或全部。
 4. 到 `result` 目录查看生成的 Excel。
 
@@ -324,7 +324,7 @@ python main.py --site all
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --name TikTokDailyReport main.py
+pyinstaller --onefile --name TikTokDailyReport_v1.1.0 main.py
 ```
 
 macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用。
@@ -336,13 +336,13 @@ macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用�
 新版程序会自动生成默认配置。如果你仍看到这个提示，说明你运行的是旧 exe，请重新执行：
 
 ```bat
-pyinstaller --onefile --name TikTokDailyReport main.py
+pyinstaller --onefile --name TikTokDailyReport_v1.1.0 main.py
 ```
 
 然后重新打开：
 
 ```text
-dist/TikTokDailyReport.exe
+dist/TikTokDailyReport_v1.1.0.exe
 ```
 
 ### 提示某个目录下未找到文件
@@ -409,7 +409,7 @@ WARNING: Library not found: could not resolve 'VERSION.dll'
 这类 warning 不一定代表失败。只要最后生成了：
 
 ```text
-dist/TikTokDailyReport.exe
+dist/TikTokDailyReport_v1.1.0.exe
 ```
 
 并且双击能启动，就可以继续测试。真正需要处理的是运行 exe 后出现的业务报错，例如配置文件、数据目录、飞书缓存缺失等。

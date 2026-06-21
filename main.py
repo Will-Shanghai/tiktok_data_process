@@ -14,6 +14,9 @@ from pathlib import Path
 import pandas as pd
 
 
+APP_VERSION = "v1.1.0"
+
+
 DEFAULT_STORES = [
     {
         "enabled": 1,
@@ -299,7 +302,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("TikTok Shop 日报生成工具")
+    print(f"TikTok Shop 日报生成工具 {APP_VERSION}")
     print("=" * 60)
     print(f"工具目录: {APP_ROOT}")
     print(f"配置文件: {CONFIG_PATH}")

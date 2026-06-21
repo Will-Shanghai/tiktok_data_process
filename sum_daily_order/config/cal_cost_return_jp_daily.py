@@ -328,7 +328,7 @@ def format_percent(value):
     return f"{value:.2%}"
 
 def build_period_comparison_frames(df_daily_product, daily_order_records):
-    """按 CSV 文件生成相邻周期对比表，表头直接使用文件名。"""
+    """按 CSV 文件生成周期汇总；多文件时追加相邻周期对比。"""
     if df_daily_product.empty or "文件名" not in df_daily_product.columns:
         return []
 
@@ -381,36 +381,39 @@ def build_period_comparison_frames(df_daily_product, daily_order_records):
         .set_index("文件名")
     )
 
-    if len(period_summary) < 2:
-        return []
-
     metrics = ["订单数", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "利润", "利润率"]
     frames = []
     ordered_files = list(period_summary.index)
+
+    summary_rows = []
+    for file_name in ordered_files:
+        row = {"文件名": file_name}
+        for metric in metrics:
+            if metric == "利润率":
+                row[metric] = format_percent(period_summary.loc[file_name, metric])
+            else:
+                row[metric] = round(period_summary.loc[file_name, metric], 2)
+        summary_rows.append(row)
+    frames.append(("周期汇总", pd.DataFrame(summary_rows)))
+
     for idx in range(1, len(ordered_files)):
         previous_file = ordered_files[idx - 1]
         current_file = ordered_files[idx]
         previous = period_summary.loc[previous_file]
         current = period_summary.loc[current_file]
-        previous_row = {"文件名": previous_file}
-        current_row = {"文件名": current_file}
-        change_value_row = {"文件名": "变化值"}
-        change_rate_row = {"文件名": "变化率"}
+        change_value_row = {"文件名": f"变化值：{current_file} - {previous_file}"}
+        change_rate_row = {"文件名": f"变化率：{current_file} / {previous_file} - 1"}
         for metric in metrics:
             if metric == "利润率":
-                previous_row[metric] = format_percent(previous[metric])
-                current_row[metric] = format_percent(current[metric])
                 change_value_row[metric] = format_percent(current[metric] - previous[metric])
                 change_rate_row[metric] = ""
             else:
                 previous_value = round(previous[metric], 2)
                 current_value = round(current[metric], 2)
-                previous_row[metric] = previous_value
-                current_row[metric] = current_value
                 change_value_row[metric] = round(current_value - previous_value, 2)
                 change_rate_row[metric] = format_percent(safe_change_rate(current_value, previous_value))
         title = f"{current_file} - {previous_file}"
-        frames.append((title, pd.DataFrame([previous_row, current_row, change_value_row, change_rate_row])))
+        frames.append((title, pd.DataFrame([change_value_row, change_rate_row])))
     return frames
 
 def center_excel_sheet(writer, sheet_name, row_count, col_count):
