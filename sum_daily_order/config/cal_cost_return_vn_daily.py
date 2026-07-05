@@ -9,6 +9,7 @@ TikTok 越南周报自动生成脚本
 """
 
 import glob
+import math
 import os
 from datetime import datetime, timedelta
 from urllib.parse import quote
@@ -54,13 +55,15 @@ FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 
 FEISHU_SHEET_TOKEN = "G3HCsMq7UhSjIptrTI5c0dUnnyh"
-FEISHU_RANGE_SKU = "A:E"
+FEISHU_RANGE_SKU = "A:G"
 FEISHU_REQUIRED_SCOPE_HINT = "请在飞书开放平台给应用开通 sheets:spreadsheet:readonly 或 sheets:spreadsheet:read 权限，并重新发布/生效。"
 
 # -------- 越南固定汇率（1 越南盾兑人民币）--------
 VIETNAM_EXCHANGE_RATE = 1 / 3883
 
 SKU_ID_COLUMN = "SKU ID"
+PRODUCT_CATEGORY_COLUMN = "产品大类"
+LOGISTICS_CAPACITY_COLUMN = "每单物流承载数量"
 CACHE_DIR = os.path.join(PROJECT_ROOT, "config", "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_EXPIRY_HOURS = 24
@@ -205,12 +208,32 @@ def clean_config_dataframe(df):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
+    if "寄样成本(元)" not in df.columns and {"产品成本(元)", "物流成本(元)"}.issubset(df.columns):
+        df["寄样成本(元)"] = df["产品成本(元)"] + df["物流成本(元)"]
+    if {"产品成本(元)", "物流成本(元)", "寄样成本(元)"}.issubset(df.columns):
+        empty_sample_cost = df["寄样成本(元)"].isna() | (df["寄样成本(元)"] <= 0)
+        df.loc[empty_sample_cost, "寄样成本(元)"] = (
+            df.loc[empty_sample_cost, "产品成本(元)"] + df.loc[empty_sample_cost, "物流成本(元)"]
+        )
+    if LOGISTICS_CAPACITY_COLUMN not in df.columns:
+        df[LOGISTICS_CAPACITY_COLUMN] = 1
+    df[LOGISTICS_CAPACITY_COLUMN] = pd.to_numeric(df[LOGISTICS_CAPACITY_COLUMN], errors="coerce").fillna(1)
+    df.loc[df[LOGISTICS_CAPACITY_COLUMN] <= 0, LOGISTICS_CAPACITY_COLUMN] = 1
+
     if raw_sample_cost is not None:
         formula_mask = raw_sample_cost.astype(str).str.match(r"^=?C\d+\+D\d+$", na=False)
         if formula_mask.any() and set(cost_cols).issubset(df.columns):
             df.loc[formula_mask, "寄样成本(元)"] = (
                 df.loc[formula_mask, "产品成本(元)"] + df.loc[formula_mask, "物流成本(元)"]
             )
+    if PRODUCT_CATEGORY_COLUMN not in df.columns:
+        df[PRODUCT_CATEGORY_COLUMN] = df.get("中文简称", "")
+    for col in ["中文简称", PRODUCT_CATEGORY_COLUMN]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+    if "中文简称" in df.columns:
+        df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].replace({"": pd.NA, "nan": pd.NA})
+        df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].fillna(df["中文简称"])
     return df
 
 
@@ -322,6 +345,67 @@ def format_percent(value):
     if value == "" or pd.isna(value):
         return ""
     return f"{value:.2%}"
+
+def build_order_logistics_allocation(df_normal, logistics_col):
+    """按订单计算物流成本，并分摊到订单内的产品规格。"""
+    result_cols = ["日期", "Product Category", "Mapped Name", "物流成本"]
+    if df_normal.empty:
+        return pd.DataFrame(columns=result_cols)
+
+    df_calc = df_normal.copy()
+    if "Order ID" in df_calc.columns:
+        order_key = df_calc["Order ID"].astype(str).str.strip()
+        missing_order = order_key.isna() | order_key.eq("") | order_key.eq("nan")
+        order_key = order_key.mask(missing_order, "ROW_" + df_calc.index.astype(str))
+    else:
+        order_key = "ROW_" + df_calc.index.astype(str)
+    df_calc["_OrderKey"] = order_key
+    df_calc[LOGISTICS_CAPACITY_COLUMN] = pd.to_numeric(
+        df_calc.get(LOGISTICS_CAPACITY_COLUMN, 1),
+        errors="coerce",
+    ).fillna(1)
+    df_calc.loc[df_calc[LOGISTICS_CAPACITY_COLUMN] <= 0, LOGISTICS_CAPACITY_COLUMN] = 1
+
+    category_order = df_calc.groupby(["_OrderKey", "日期", "Product Category"]).agg(
+        category_qty=("SKU_ID", "count"),
+        original_logistics=(logistics_col, "sum"),
+        unit_logistics=(logistics_col, "max"),
+        capacity=(LOGISTICS_CAPACITY_COLUMN, "max"),
+    ).reset_index()
+    category_order["_capacity_logistics"] = category_order.apply(
+        lambda row: math.ceil(row["category_qty"] / row["capacity"]) * row["unit_logistics"],
+        axis=1,
+    )
+    category_order["candidate_logistics"] = category_order[["original_logistics", "_capacity_logistics"]].min(axis=1)
+    order_max = category_order.groupby("_OrderKey")["candidate_logistics"].transform("max")
+    order_sum = category_order.groupby("_OrderKey")["candidate_logistics"].transform("sum")
+    category_order["category_logistics"] = category_order.apply(
+        lambda row: 0 if order_sum.loc[row.name] == 0 else order_max.loc[row.name] * row["candidate_logistics"] / order_sum.loc[row.name],
+        axis=1,
+    )
+
+    sku_order = df_calc.groupby(["_OrderKey", "日期", "Product Category", "Mapped Name"]).agg(
+        sku_qty=("SKU_ID", "count"),
+        sku_original_logistics=(logistics_col, "sum"),
+    ).reset_index()
+    sku_order = sku_order.merge(
+        category_order[["_OrderKey", "日期", "Product Category", "category_qty", "original_logistics", "category_logistics"]],
+        on=["_OrderKey", "日期", "Product Category"],
+        how="left",
+    )
+    sku_order["物流成本"] = sku_order.apply(
+        lambda row: (
+            0
+            if row["category_qty"] == 0
+            else row["category_logistics"] * (
+                row["sku_original_logistics"] / row["original_logistics"]
+                if row["original_logistics"] != 0
+                else row["sku_qty"] / row["category_qty"]
+            )
+        ),
+        axis=1,
+    )
+    return sku_order.groupby(["日期", "Product Category", "Mapped Name"])["物流成本"].sum().reset_index()
 
 
 def build_period_comparison_frames(df_daily_product, daily_order_records):
@@ -592,7 +676,7 @@ def run_report(store_config, config_df, exchange_rate):
         df_normal["SKU_ID"] = clean_sku_str(df_normal[SKU_ID_COLUMN])
 
         df_normal = df_normal.merge(
-            config_df[[SKU_ID_COLUMN, "中文简称", "产品成本(元)", logistics_col, sample_cost_col]],
+            config_df[[SKU_ID_COLUMN, PRODUCT_CATEGORY_COLUMN, "中文简称", "产品成本(元)", logistics_col, sample_cost_col, LOGISTICS_CAPACITY_COLUMN]],
             left_on="SKU_ID",
             right_on=SKU_ID_COLUMN,
             how="left",
@@ -604,6 +688,7 @@ def run_report(store_config, config_df, exchange_rate):
                 unmatched_skus.add(sku)
 
         df_normal["Mapped Name"] = df_normal["中文简称"].fillna(df_normal["SKU_ID"])
+        df_normal["Product Category"] = df_normal[PRODUCT_CATEGORY_COLUMN].fillna(df_normal["Mapped Name"])
         if "Order ID" in df_normal.columns:
             daily_order_records.extend(
                 df_normal[["日期", "Order ID"]]
@@ -613,19 +698,24 @@ def run_report(store_config, config_df, exchange_rate):
                 .to_dict("records")
             )
 
-        norm_agg = df_normal.groupby(["日期", "Mapped Name"]).agg({
+        norm_agg = df_normal.groupby(["日期", "Product Category", "Mapped Name"]).agg({
             n_col: "sum",
             p_col: "sum",
             r_col: "sum",
             "产品成本(元)": "first",
-            logistics_col: "first",
             sample_cost_col: "first",
             "SKU_ID": "count",
         }).reset_index()
         norm_agg.rename(columns={"SKU_ID": "销量"}, inplace=True)
         norm_agg["销售额"] = norm_agg[n_col] + norm_agg[p_col] + norm_agg[r_col]
         norm_agg["产品成本"] = norm_agg["销量"] * norm_agg["产品成本(元)"]
-        norm_agg["物流成本"] = norm_agg["销量"] * norm_agg[logistics_col]
+        logistics_daily_product = build_order_logistics_allocation(df_normal, logistics_col)
+        norm_agg = norm_agg.merge(
+            logistics_daily_product,
+            on=["日期", "Product Category", "Mapped Name"],
+            how="left",
+        )
+        norm_agg["物流成本"] = norm_agg["物流成本"].fillna(0)
 
         # -------- 样品订单 --------
         sample_mask = ~status_series.isin(cancel_keywords) & (
@@ -643,7 +733,7 @@ def run_report(store_config, config_df, exchange_rate):
         if not df_sample.empty:
             df_sample["SKU_ID"] = clean_sku_str(df_sample[SKU_ID_COLUMN])
             df_sample = df_sample.merge(
-                config_df[[SKU_ID_COLUMN, "中文简称", sample_cost_col]],
+                config_df[[SKU_ID_COLUMN, PRODUCT_CATEGORY_COLUMN, "中文简称", sample_cost_col]],
                 left_on="SKU_ID",
                 right_on=SKU_ID_COLUMN,
                 how="left",
@@ -653,30 +743,35 @@ def run_report(store_config, config_df, exchange_rate):
                 for sku in missing_s["SKU_ID"].unique():
                     unmatched_skus.add(sku)
             df_sample["Mapped Name"] = df_sample["中文简称"].fillna(df_sample["SKU_ID"])
+            df_sample["Product Category"] = df_sample[PRODUCT_CATEGORY_COLUMN].fillna(df_sample["Mapped Name"])
 
-            sample_daily_product = df_sample.groupby(["日期", "Mapped Name"]).agg({
+            sample_daily_product = df_sample.groupby(["日期", "Product Category", "Mapped Name"]).agg({
                 sample_cost_col: "first",
                 "SKU_ID": "count",
             }).reset_index()
             sample_daily_product.rename(columns={"SKU_ID": "寄样数"}, inplace=True)
             sample_daily_product["寄样支出"] = sample_daily_product["寄样数"] * sample_daily_product[sample_cost_col]
-            sample_daily_product = sample_daily_product[["日期", "Mapped Name", "寄样数", "寄样支出"]]
+            sample_daily_product = sample_daily_product[["日期", "Product Category", "Mapped Name", "寄样数", "寄样支出"]]
         else:
-            sample_daily_product = pd.DataFrame(columns=["日期", "Mapped Name", "寄样数", "寄样支出"])
+            sample_daily_product = pd.DataFrame(columns=["日期", "Product Category", "Mapped Name", "寄样数", "寄样支出"])
 
         merged_daily_product = norm_agg[[
-            "日期", "Mapped Name", "销量", "销售额", p_col, "产品成本", "物流成本"
+            "日期", "Product Category", "Mapped Name", "销量", "销售额", p_col, "产品成本", "物流成本"
         ]].merge(
             sample_daily_product,
-            on=["日期", "Mapped Name"],
+            on=["日期", "Product Category", "Mapped Name"],
             how="outer",
-        ).fillna(0)
+        )
+        for col in ["销量", "销售额", p_col, "产品成本", "物流成本", "寄样数", "寄样支出"]:
+            if col in merged_daily_product.columns:
+                merged_daily_product[col] = pd.to_numeric(merged_daily_product[col], errors="coerce").fillna(0)
         merged_daily_product["汇率后金额"] = (merged_daily_product["销售额"] * exchange_rate).round(2)
 
         for _, row in merged_daily_product.iterrows():
             daily_product_detail_list.append({
                 "文件名": file_name,
                 "日期": row["日期"],
+                "产品大类": row["Product Category"],
                 "产品名称": row["Mapped Name"],
                 "销量": int(row["销量"]),
                 "寄样数": int(row["寄样数"]),
@@ -692,7 +787,7 @@ def run_report(store_config, config_df, exchange_rate):
             product_quantity_records.append({
                 "文件名": file_name,
                 "日期": row["日期"],
-                "产品名称": row["Mapped Name"],
+                "产品名称": row["Product Category"],
                 "销量": int(row["销量"]),
             })
 
@@ -700,7 +795,7 @@ def run_report(store_config, config_df, exchange_rate):
             sample_quantity_records.append({
                 "文件名": file_name,
                 "日期": row["日期"],
-                "产品名称": row["Mapped Name"],
+                "产品名称": row["Product Category"],
                 "寄样数": int(row["寄样数"]),
             })
 
@@ -708,7 +803,17 @@ def run_report(store_config, config_df, exchange_rate):
         print(f"⚠️ [{display_name}] 没有有效数据，不生成报表。")
         return
 
-    df_daily_product = pd.DataFrame(daily_product_detail_list)
+    df_sku_detail = pd.DataFrame(daily_product_detail_list)
+    df_daily_product = df_sku_detail.groupby(["文件名", "日期", "产品大类"]).agg({
+        "销量": "sum",
+        "寄样数": "sum",
+        "销售额": "sum",
+        "汇率后金额": "sum",
+        "P列折后价": "sum",
+        "产品成本": "sum",
+        "物流成本": "sum",
+        "寄样支出": "sum",
+    }).reset_index().rename(columns={"产品大类": "产品名称"})
     df_daily_summary = df_daily_product.groupby(["文件名", "日期"]).agg({
         "销量": "sum",
         "寄样数": "sum",
@@ -746,6 +851,12 @@ def run_report(store_config, config_df, exchange_rate):
         .drop(columns=["temp_date"])
     df_daily_product = df_daily_product[[
         "文件名", "日期", "产品名称", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出"
+    ]]
+    df_sku_detail = df_sku_detail.assign(temp_date=pd.to_datetime(df_sku_detail["日期"], errors="coerce")) \
+        .sort_values(["temp_date", "文件名", "产品大类", "产品名称"]) \
+        .drop(columns=["temp_date"])
+    df_sku_detail = df_sku_detail[[
+        "文件名", "日期", "产品大类", "产品名称", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出"
     ]]
 
     period_comparison_frames = build_period_comparison_frames(df_daily_product, daily_order_records)
@@ -801,6 +912,10 @@ def run_report(store_config, config_df, exchange_rate):
             detail_rows = detail_startrow + len(df_daily_product) + 1
             detail_cols = max(len(df_product_profit_by_period.columns), len(df_daily_product.columns))
             center_excel_sheet(writer, detail_sheet, detail_rows, detail_cols)
+
+            sku_detail_sheet = "SKU Detail"
+            df_sku_detail.to_excel(writer, sheet_name=sku_detail_sheet, index=False)
+            center_excel_sheet(writer, sku_detail_sheet, len(df_sku_detail) + 1, len(df_sku_detail.columns))
 
             quantity_sheet = "Product Quantity Matrix"
             df_product_quantity_by_period.to_excel(writer, sheet_name=quantity_sheet, index=True)
