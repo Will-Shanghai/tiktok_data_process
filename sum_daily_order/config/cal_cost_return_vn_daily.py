@@ -508,6 +508,20 @@ def center_excel_sheet(writer, sheet_name, row_count, col_count):
         worksheet.set_row(row_idx, None, center_format)
 
 
+def insert_blank_rows_between_files(df):
+    """输出展示用：不同文件名之间插入空行，不参与任何计算。"""
+    if df.empty or "文件名" not in df.columns:
+        return df
+
+    parts = []
+    blank_row = {col: "" for col in df.columns}
+    for _, group in df.groupby("文件名", sort=False, dropna=False):
+        if parts:
+            parts.append(pd.DataFrame([blank_row], columns=df.columns))
+        parts.append(group)
+    return pd.concat(parts, ignore_index=True)
+
+
 def build_product_profit_by_period(df_daily_product):
     """按文件+产品汇总 GMV、成本和利润，方便判断单品盈利情况。"""
     if df_daily_product.empty:
@@ -902,31 +916,37 @@ def run_report(store_config, config_df, exchange_rate):
     try:
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
         with pd.ExcelWriter(output_filename, engine="xlsxwriter") as writer:
-            df_daily_summary.to_excel(writer, sheet_name="Daily Summary", index=False)
-            center_excel_sheet(writer, "Daily Summary", len(df_daily_summary) + 1, len(df_daily_summary.columns))
+            df_daily_summary_display = insert_blank_rows_between_files(df_daily_summary)
+            df_daily_summary_display.to_excel(writer, sheet_name="Daily Summary", index=False)
+            center_excel_sheet(writer, "Daily Summary", len(df_daily_summary_display) + 1, len(df_daily_summary_display.columns))
 
             detail_sheet = "Daily Product Detail"
-            df_product_profit_by_period.to_excel(writer, sheet_name=detail_sheet, index=False)
-            detail_startrow = len(df_product_profit_by_period) + 3
-            df_daily_product.to_excel(writer, sheet_name=detail_sheet, startrow=detail_startrow, index=False)
-            detail_rows = detail_startrow + len(df_daily_product) + 1
-            detail_cols = max(len(df_product_profit_by_period.columns), len(df_daily_product.columns))
+            df_product_profit_display = insert_blank_rows_between_files(df_product_profit_by_period)
+            df_daily_product_display = insert_blank_rows_between_files(df_daily_product)
+            df_product_profit_display.to_excel(writer, sheet_name=detail_sheet, index=False)
+            detail_startrow = len(df_product_profit_display) + 3
+            df_daily_product_display.to_excel(writer, sheet_name=detail_sheet, startrow=detail_startrow, index=False)
+            detail_rows = detail_startrow + len(df_daily_product_display) + 1
+            detail_cols = max(len(df_product_profit_display.columns), len(df_daily_product_display.columns))
             center_excel_sheet(writer, detail_sheet, detail_rows, detail_cols)
 
             sku_detail_sheet = "SKU Detail"
-            df_sku_detail.to_excel(writer, sheet_name=sku_detail_sheet, index=False)
-            center_excel_sheet(writer, sku_detail_sheet, len(df_sku_detail) + 1, len(df_sku_detail.columns))
+            df_sku_detail_display = insert_blank_rows_between_files(df_sku_detail)
+            df_sku_detail_display.to_excel(writer, sheet_name=sku_detail_sheet, index=False)
+            center_excel_sheet(writer, sku_detail_sheet, len(df_sku_detail_display) + 1, len(df_sku_detail_display.columns))
 
             quantity_sheet = "Product Quantity Matrix"
             df_product_quantity_by_period.to_excel(writer, sheet_name=quantity_sheet, index=True)
             quantity_startrow = len(df_product_quantity_by_period) + 3
-            df_quantity_matrix.to_excel(writer, sheet_name=quantity_sheet, startrow=quantity_startrow, index=False)
-            quantity_rows = quantity_startrow + len(df_quantity_matrix) + 1
-            quantity_cols = max(len(df_product_quantity_by_period.columns) + 1, len(df_quantity_matrix.columns))
+            df_quantity_matrix_display = insert_blank_rows_between_files(df_quantity_matrix)
+            df_quantity_matrix_display.to_excel(writer, sheet_name=quantity_sheet, startrow=quantity_startrow, index=False)
+            quantity_rows = quantity_startrow + len(df_quantity_matrix_display) + 1
+            quantity_cols = max(len(df_product_quantity_by_period.columns) + 1, len(df_quantity_matrix_display.columns))
             center_excel_sheet(writer, quantity_sheet, quantity_rows, quantity_cols)
 
-            df_sample_matrix.to_excel(writer, sheet_name="Sample Statistics", index=False)
-            center_excel_sheet(writer, "Sample Statistics", len(df_sample_matrix) + 1, len(df_sample_matrix.columns))
+            df_sample_matrix_display = insert_blank_rows_between_files(df_sample_matrix)
+            df_sample_matrix_display.to_excel(writer, sheet_name="Sample Statistics", index=False)
+            center_excel_sheet(writer, "Sample Statistics", len(df_sample_matrix_display) + 1, len(df_sample_matrix_display.columns))
 
             if period_comparison_frames:
                 startrow = 0
