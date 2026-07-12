@@ -553,6 +553,37 @@ def build_product_profit_by_period(df_daily_product):
     ]]
 
 
+def build_sku_profit_by_period(df_sku_detail):
+    """按文件+产品大类+SKU 汇总，放在 Daily Product Detail 下半部分。"""
+    if df_sku_detail.empty:
+        return pd.DataFrame([["无 SKU 汇总数据"]], columns=["提示"])
+
+    summary = df_sku_detail.groupby(["文件名", "产品大类", "产品名称"]).agg({
+        "销量": "sum",
+        "寄样数": "sum",
+        "销售额": "sum",
+        "汇率后金额": "sum",
+        "P列折后价": "sum",
+        "产品成本": "sum",
+        "物流成本": "sum",
+        "寄样支出": "sum",
+    }).reset_index()
+    summary["总成本"] = summary["产品成本"] + summary["物流成本"] + summary["寄样支出"]
+    summary["利润"] = summary["汇率后金额"] - summary["总成本"]
+    summary["利润率"] = summary.apply(
+        lambda row: "" if row["汇率后金额"] == 0 else format_percent(row["利润"] / row["汇率后金额"]),
+        axis=1,
+    )
+
+    numeric_cols = ["销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "总成本", "利润"]
+    for col in numeric_cols:
+        summary[col] = summary[col].round(2)
+    return summary[[
+        "文件名", "产品大类", "产品名称", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价",
+        "产品成本", "物流成本", "寄样支出", "总成本", "利润", "利润率"
+    ]]
+
+
 def build_product_quantity_by_period(product_quantity_records):
     """按文件汇总每个产品的销量，放在每日销量矩阵上方。"""
     df_quantity_records = pd.DataFrame(product_quantity_records)
@@ -875,6 +906,7 @@ def run_report(store_config, config_df, exchange_rate):
 
     period_comparison_frames = build_period_comparison_frames(df_daily_product, daily_order_records)
     df_product_profit_by_period = build_product_profit_by_period(df_daily_product)
+    df_sku_profit_by_period = build_sku_profit_by_period(df_sku_detail)
     df_product_quantity_by_period = build_product_quantity_by_period(product_quantity_records)
 
     df_quantity_records = pd.DataFrame(product_quantity_records)
@@ -922,12 +954,12 @@ def run_report(store_config, config_df, exchange_rate):
 
             detail_sheet = "Daily Product Detail"
             df_product_profit_display = insert_blank_rows_between_files(df_product_profit_by_period)
-            df_daily_product_display = insert_blank_rows_between_files(df_daily_product)
+            df_sku_profit_display = insert_blank_rows_between_files(df_sku_profit_by_period)
             df_product_profit_display.to_excel(writer, sheet_name=detail_sheet, index=False)
             detail_startrow = len(df_product_profit_display) + 3
-            df_daily_product_display.to_excel(writer, sheet_name=detail_sheet, startrow=detail_startrow, index=False)
-            detail_rows = detail_startrow + len(df_daily_product_display) + 1
-            detail_cols = max(len(df_product_profit_display.columns), len(df_daily_product_display.columns))
+            df_sku_profit_display.to_excel(writer, sheet_name=detail_sheet, startrow=detail_startrow, index=False)
+            detail_rows = detail_startrow + len(df_sku_profit_display) + 1
+            detail_cols = max(len(df_product_profit_display.columns), len(df_sku_profit_display.columns))
             center_excel_sheet(writer, detail_sheet, detail_rows, detail_cols)
 
             sku_detail_sheet = "SKU Detail"
