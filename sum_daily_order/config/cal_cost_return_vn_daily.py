@@ -953,13 +953,13 @@ def run_report(store_config, config_df, exchange_rate):
             center_excel_sheet(writer, "Daily Summary", len(df_daily_summary_display) + 1, len(df_daily_summary_display.columns))
 
             detail_sheet = "Daily Product Detail"
-            df_product_profit_display = insert_blank_rows_between_files(df_product_profit_by_period)
+            df_daily_product_display = insert_blank_rows_between_files(df_daily_product)
             df_sku_profit_display = insert_blank_rows_between_files(df_sku_profit_by_period)
-            df_product_profit_display.to_excel(writer, sheet_name=detail_sheet, index=False)
-            detail_startrow = len(df_product_profit_display) + 3
+            df_daily_product_display.to_excel(writer, sheet_name=detail_sheet, index=False)
+            detail_startrow = len(df_daily_product_display) + 3
             df_sku_profit_display.to_excel(writer, sheet_name=detail_sheet, startrow=detail_startrow, index=False)
             detail_rows = detail_startrow + len(df_sku_profit_display) + 1
-            detail_cols = max(len(df_product_profit_display.columns), len(df_sku_profit_display.columns))
+            detail_cols = max(len(df_daily_product_display.columns), len(df_sku_profit_display.columns))
             center_excel_sheet(writer, detail_sheet, detail_rows, detail_cols)
 
             sku_detail_sheet = "SKU Detail"
