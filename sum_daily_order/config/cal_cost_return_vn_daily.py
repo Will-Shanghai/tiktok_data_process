@@ -513,9 +513,13 @@ def insert_blank_rows_between_files(df):
     if df.empty or "文件名" not in df.columns:
         return df
 
+    summary_labels = {"全部文件合计", "汇总", "总计"}
     parts = []
     blank_row = {col: "" for col in df.columns}
-    for _, group in df.groupby("文件名", sort=False, dropna=False):
+    for file_name, group in df.groupby("文件名", sort=False, dropna=False):
+        if str(file_name).strip() in summary_labels:
+            parts.append(group)
+            continue
         if parts:
             parts.append(pd.DataFrame([blank_row], columns=df.columns))
         parts.append(group)
