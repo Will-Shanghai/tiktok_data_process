@@ -17,6 +17,8 @@ from urllib.parse import quote
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+from openpyxl.styles import Alignment
+from openpyxl.utils import get_column_letter
 
 def find_project_root(start_dir):
     """向上查找 sum_daily_order 根目录，避免依赖固定绝对路径。"""
@@ -462,7 +464,7 @@ def build_period_comparison_frames(df_daily_product, daily_order_records):
         .set_index("文件名")
     )
 
-    metrics = ["订单数", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "利润", "利润率"]
+    metrics = ["订单数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "利润", "利润率", "销量", "寄样数"]
     frames = []
     ordered_files = list(period_summary.index)
 
@@ -500,12 +502,33 @@ def build_period_comparison_frames(df_daily_product, daily_order_records):
 def center_excel_sheet(writer, sheet_name, row_count, col_count):
     """把已写入的工作表区域设置为居中显示。"""
     worksheet = writer.sheets[sheet_name]
-    if not hasattr(writer, "_center_format"):
-        writer._center_format = writer.book.add_format({"align": "center", "valign": "vcenter"})
-    center_format = writer._center_format
-    worksheet.set_column(0, max(col_count - 1, 0), 14, center_format)
-    for row_idx in range(row_count):
-        worksheet.set_row(row_idx, None, center_format)
+    if hasattr(worksheet, "set_column"):
+        if not hasattr(writer, "_center_format"):
+            writer._center_format = writer.book.add_format({"align": "center", "valign": "vcenter"})
+        center_format = writer._center_format
+        worksheet.set_column(0, max(col_count - 1, 0), 14, center_format)
+        for row_idx in range(row_count):
+            worksheet.set_row(row_idx, None, center_format)
+        return
+
+    center_alignment = Alignment(horizontal="center", vertical="center")
+    for row in worksheet.iter_rows(min_row=1, max_row=row_count, min_col=1, max_col=col_count):
+        for cell in row:
+            cell.alignment = center_alignment
+
+    for col_idx in range(1, col_count + 1):
+        max_width = 10
+        for row_idx in range(1, row_count + 1):
+            value = worksheet.cell(row=row_idx, column=col_idx).value
+            if value is None:
+                continue
+            text = str(value)
+            width = sum(2 if ord(char) > 127 else 1 for char in text)
+            max_width = max(max_width, width + 2)
+        worksheet.column_dimensions[get_column_letter(col_idx)].width = min(max_width, 28)
+
+    for row_idx in range(1, row_count + 1):
+        worksheet.row_dimensions[row_idx].height = 20
 
 
 def insert_blank_rows_between_files(df):
@@ -552,7 +575,7 @@ def build_product_profit_by_period(df_daily_product):
     for col in numeric_cols:
         summary[col] = summary[col].round(2)
     return summary[[
-        "文件名", "产品名称", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价",
+        "文件名", "产品名称", "销售额", "汇率后金额", "P列折后价",
         "产品成本", "物流成本", "寄样支出", "总成本", "利润", "利润率"
     ]]
 
@@ -583,8 +606,8 @@ def build_sku_profit_by_period(df_sku_detail):
     for col in numeric_cols:
         summary[col] = summary[col].round(2)
     return summary[[
-        "文件名", "产品大类", "产品名称", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价",
-        "产品成本", "物流成本", "寄样支出", "总成本", "利润", "利润率"
+        "文件名", "产品大类", "产品名称", "销售额", "汇率后金额", "P列折后价",
+        "产品成本", "物流成本", "寄样支出", "总成本", "利润", "利润率", "销量", "寄样数"
     ]]
 
 
@@ -604,6 +627,25 @@ def build_product_quantity_by_period(product_quantity_records):
     matrix["汇总"] = matrix.sum(axis=1)
     matrix.loc["汇总"] = matrix.sum(axis=0)
     return matrix
+
+
+def build_daily_product_quantity_matrix(df_daily_product):
+    """按日期横向展开每个产品的销量，用于 Daily Product Detail。"""
+    if df_daily_product.empty:
+        return pd.DataFrame([["无每日产品销量数据"]], columns=["提示"])
+
+    matrix = df_daily_product.pivot_table(
+        index="产品名称",
+        columns="日期",
+        values="销量",
+        aggfunc="sum",
+        fill_value=0,
+    ).astype(int)
+    sorted_cols = sorted(matrix.columns, key=lambda x: pd.to_datetime(x, errors="coerce"))
+    matrix = matrix[sorted_cols]
+    matrix["汇总"] = matrix.sum(axis=1)
+    matrix.loc["汇总"] = matrix.sum(axis=0)
+    return matrix.reset_index()
 
 
 def collect_order_sku_preview(store_config, max_rows=80):
@@ -884,7 +926,7 @@ def run_report(store_config, config_df, exchange_rate):
     df_daily_summary = df_daily_summary.merge(df_order_count, on=["文件名", "日期"], how="left")
     df_daily_summary["订单数"] = df_daily_summary["订单数"].fillna(0).astype(int)
     df_daily_summary = df_daily_summary[[
-        "文件名", "日期", "订单数", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出"
+        "文件名", "日期", "订单数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
     ]]
     df_daily_summary = df_daily_summary.assign(temp_date=pd.to_datetime(df_daily_summary["日期"], errors="coerce")) \
         .sort_values(["文件名", "temp_date"]) \
@@ -899,19 +941,19 @@ def run_report(store_config, config_df, exchange_rate):
         .sort_values(["temp_date", "文件名", "产品名称"]) \
         .drop(columns=["temp_date"])
     df_daily_product = df_daily_product[[
-        "文件名", "日期", "产品名称", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出"
+        "文件名", "日期", "产品名称", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
     ]]
     df_sku_detail = df_sku_detail.assign(temp_date=pd.to_datetime(df_sku_detail["日期"], errors="coerce")) \
         .sort_values(["temp_date", "文件名", "产品大类", "产品名称"]) \
         .drop(columns=["temp_date"])
     df_sku_detail = df_sku_detail[[
-        "文件名", "日期", "产品大类", "产品名称", "销量", "寄样数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出"
+        "文件名", "日期", "产品大类", "产品名称", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
     ]]
 
     period_comparison_frames = build_period_comparison_frames(df_daily_product, daily_order_records)
     df_product_profit_by_period = build_product_profit_by_period(df_daily_product)
-    df_sku_profit_by_period = build_sku_profit_by_period(df_sku_detail)
     df_product_quantity_by_period = build_product_quantity_by_period(product_quantity_records)
+    df_daily_product_quantity_matrix = build_daily_product_quantity_matrix(df_daily_product)
 
     df_quantity_records = pd.DataFrame(product_quantity_records)
     if not df_quantity_records.empty:
@@ -951,20 +993,15 @@ def run_report(store_config, config_df, exchange_rate):
 
     try:
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
-        with pd.ExcelWriter(output_filename, engine="xlsxwriter") as writer:
-            df_daily_summary_display = insert_blank_rows_between_files(df_daily_summary)
-            df_daily_summary_display.to_excel(writer, sheet_name="Daily Summary", index=False)
-            center_excel_sheet(writer, "Daily Summary", len(df_daily_summary_display) + 1, len(df_daily_summary_display.columns))
+        with pd.ExcelWriter(output_filename, engine="openpyxl") as writer:
+            file_summary_sheet = "File Summary"
+            df_file_summary_display = insert_blank_rows_between_files(df_product_profit_by_period)
+            df_file_summary_display.to_excel(writer, sheet_name=file_summary_sheet, index=False)
+            center_excel_sheet(writer, file_summary_sheet, len(df_file_summary_display) + 1, len(df_file_summary_display.columns))
 
             detail_sheet = "Daily Product Detail"
-            df_daily_product_display = insert_blank_rows_between_files(df_daily_product)
-            df_sku_profit_display = insert_blank_rows_between_files(df_sku_profit_by_period)
-            df_daily_product_display.to_excel(writer, sheet_name=detail_sheet, index=False)
-            detail_startrow = len(df_daily_product_display) + 3
-            df_sku_profit_display.to_excel(writer, sheet_name=detail_sheet, startrow=detail_startrow, index=False)
-            detail_rows = detail_startrow + len(df_sku_profit_display) + 1
-            detail_cols = max(len(df_daily_product_display.columns), len(df_sku_profit_display.columns))
-            center_excel_sheet(writer, detail_sheet, detail_rows, detail_cols)
+            df_daily_product_quantity_matrix.to_excel(writer, sheet_name=detail_sheet, index=False)
+            center_excel_sheet(writer, detail_sheet, len(df_daily_product_quantity_matrix) + 1, len(df_daily_product_quantity_matrix.columns))
 
             sku_detail_sheet = "SKU Detail"
             df_sku_detail_display = insert_blank_rows_between_files(df_sku_detail)
