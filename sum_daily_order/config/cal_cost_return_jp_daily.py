@@ -692,6 +692,7 @@ def run_report(combo, config_df, exchange_rate):
     r_col = 'Original Shipping Fee'
 
     daily_product_detail_list = []
+    sku_order_detail_list = []
     product_quantity_records = []
     sample_quantity_records = []
     daily_order_records = []
@@ -794,6 +795,22 @@ def run_report(combo, config_df, exchange_rate):
             'SKU_ID': 'count'
         }).reset_index()
         normal_daily_product.rename(columns={'SKU_ID': '销量'}, inplace=True)
+        if 'Order ID' in df_normal.columns:
+            sku_daily_order_count = (
+                df_normal[['日期', 'Product Category', 'Mapped Name', 'Order ID']]
+                .dropna(subset=['Order ID'])
+                .assign(Order_ID_Clean=lambda x: x['Order ID'].astype(str).str.strip())
+            )
+            sku_daily_order_count = (
+                sku_daily_order_count[sku_daily_order_count['Order_ID_Clean'] != '']
+                .groupby(['日期', 'Product Category', 'Mapped Name'])['Order_ID_Clean']
+                .nunique()
+                .reset_index()
+                .rename(columns={'Order_ID_Clean': '订单数'})
+            )
+        else:
+            sku_daily_order_count = normal_daily_product[['日期', 'Product Category', 'Mapped Name', '销量']].copy()
+            sku_daily_order_count.rename(columns={'销量': '订单数'}, inplace=True)
         normal_daily_product['销售额'] = (
             normal_daily_product[n_col] + normal_daily_product[p_col] + normal_daily_product[r_col]
         )
@@ -844,6 +861,15 @@ def run_report(combo, config_df, exchange_rate):
                 '寄样支出': round(row['寄样支出'], 2)
             })
 
+        for _, row in sku_daily_order_count.iterrows():
+            sku_order_detail_list.append({
+                '文件名': file_name,
+                '日期': row['日期'],
+                '产品大类': row['Product Category'],
+                '产品名称': row['Mapped Name'],
+                '订单数': int(row['订单数'])
+            })
+
         for _, row in normal_daily_product.iterrows():
             product_quantity_records.append({
                 '文件名': file_name,
@@ -867,6 +893,18 @@ def run_report(combo, config_df, exchange_rate):
 
     # Sheet1: 文件汇总
     df_sku_detail = pd.DataFrame(daily_product_detail_list)
+    if sku_order_detail_list:
+        df_sku_order_count = pd.DataFrame(sku_order_detail_list) \
+            .groupby(['文件名', '日期', '产品大类', '产品名称'])['订单数'] \
+            .sum().reset_index()
+        df_sku_detail = df_sku_detail.merge(
+            df_sku_order_count,
+            on=['文件名', '日期', '产品大类', '产品名称'],
+            how='left'
+        )
+    else:
+        df_sku_detail['订单数'] = 0
+    df_sku_detail['订单数'] = df_sku_detail['订单数'].fillna(0).astype(int)
     df_daily_product = df_sku_detail.groupby(['文件名', '日期', '产品大类']).agg({
         '销量': 'sum',
         '销售额': 'sum',
@@ -920,7 +958,7 @@ def run_report(combo, config_df, exchange_rate):
         .sort_values(['temp_date', '文件名', '产品大类', '产品名称']) \
         .drop(columns=['temp_date'])
     df_sku_detail = df_sku_detail[[
-        '文件名', '日期', '产品大类', '产品名称', '销售额', '汇率后金额', 'P列折后价', '产品成本', '物流成本', '寄样支出', '销量', '寄样数'
+        '文件名', '日期', '产品大类', '产品名称', '订单数', '销售额', '汇率后金额', 'P列折后价', '产品成本', '物流成本', '寄样支出', '销量', '寄样数'
     ]]
 
     period_comparison_frames = build_period_comparison_frames(df_daily_product, daily_order_records)

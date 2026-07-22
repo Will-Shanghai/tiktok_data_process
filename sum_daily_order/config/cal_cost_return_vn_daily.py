@@ -730,6 +730,7 @@ def run_report(store_config, config_df, exchange_rate):
     cancel_keywords = ["Canceled", "Cancelled", "Unpaid", "已取消", "未支付", "未付款", "部分发货后取消"]
 
     daily_product_detail_list = []
+    sku_order_detail_list = []
     product_quantity_records = []
     sample_quantity_records = []
     daily_order_records = []
@@ -798,6 +799,22 @@ def run_report(store_config, config_df, exchange_rate):
             "SKU_ID": "count",
         }).reset_index()
         norm_agg.rename(columns={"SKU_ID": "销量"}, inplace=True)
+        if "Order ID" in df_normal.columns:
+            sku_daily_order_count = (
+                df_normal[["日期", "Product Category", "Mapped Name", "Order ID"]]
+                .dropna(subset=["Order ID"])
+                .assign(Order_ID_Clean=lambda x: x["Order ID"].astype(str).str.strip())
+            )
+            sku_daily_order_count = (
+                sku_daily_order_count[sku_daily_order_count["Order_ID_Clean"] != ""]
+                .groupby(["日期", "Product Category", "Mapped Name"])["Order_ID_Clean"]
+                .nunique()
+                .reset_index()
+                .rename(columns={"Order_ID_Clean": "订单数"})
+            )
+        else:
+            sku_daily_order_count = norm_agg[["日期", "Product Category", "Mapped Name", "销量"]].copy()
+            sku_daily_order_count.rename(columns={"销量": "订单数"}, inplace=True)
         norm_agg["销售额"] = norm_agg[n_col] + norm_agg[p_col] + norm_agg[r_col]
         norm_agg["产品成本"] = norm_agg["销量"] * norm_agg["产品成本(元)"]
         logistics_daily_product = build_order_logistics_allocation(df_normal, logistics_col)
@@ -874,6 +891,15 @@ def run_report(store_config, config_df, exchange_rate):
                 "寄样支出": round(row["寄样支出"], 2),
             })
 
+        for _, row in sku_daily_order_count.iterrows():
+            sku_order_detail_list.append({
+                "文件名": file_name,
+                "日期": row["日期"],
+                "产品大类": row["Product Category"],
+                "产品名称": row["Mapped Name"],
+                "订单数": int(row["订单数"]),
+            })
+
         for _, row in norm_agg.iterrows():
             product_quantity_records.append({
                 "文件名": file_name,
@@ -895,6 +921,18 @@ def run_report(store_config, config_df, exchange_rate):
         return
 
     df_sku_detail = pd.DataFrame(daily_product_detail_list)
+    if sku_order_detail_list:
+        df_sku_order_count = pd.DataFrame(sku_order_detail_list) \
+            .groupby(["文件名", "日期", "产品大类", "产品名称"])["订单数"] \
+            .sum().reset_index()
+        df_sku_detail = df_sku_detail.merge(
+            df_sku_order_count,
+            on=["文件名", "日期", "产品大类", "产品名称"],
+            how="left",
+        )
+    else:
+        df_sku_detail["订单数"] = 0
+    df_sku_detail["订单数"] = df_sku_detail["订单数"].fillna(0).astype(int)
     df_daily_product = df_sku_detail.groupby(["文件名", "日期", "产品大类"]).agg({
         "销量": "sum",
         "寄样数": "sum",
@@ -947,7 +985,7 @@ def run_report(store_config, config_df, exchange_rate):
         .sort_values(["temp_date", "文件名", "产品大类", "产品名称"]) \
         .drop(columns=["temp_date"])
     df_sku_detail = df_sku_detail[[
-        "文件名", "日期", "产品大类", "产品名称", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
+        "文件名", "日期", "产品大类", "产品名称", "订单数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
     ]]
 
     period_comparison_frames = build_period_comparison_frames(df_daily_product, daily_order_records)
