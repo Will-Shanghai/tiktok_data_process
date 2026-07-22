@@ -49,10 +49,10 @@ jobs:
 
           "clean=$cleanVersion" >> $env:GITHUB_OUTPUT
           "tag=$tagVersion" >> $env:GITHUB_OUTPUT
-          "exe_base=TikTokDailyReport_$tagVersion" >> $env:GITHUB_OUTPUT
-          "exe_file=TikTokDailyReport_$tagVersion.exe" >> $env:GITHUB_OUTPUT
-          "package_name=TikTokDailyReport_$tagVersion_windows" >> $env:GITHUB_OUTPUT
-          "folder_name=TikTokDailyReport_$tagVersion" >> $env:GITHUB_OUTPUT
+          "exe_base=TikTokDailyReport_${tagVersion}" >> $env:GITHUB_OUTPUT
+          "exe_file=TikTokDailyReport_${tagVersion}.exe" >> $env:GITHUB_OUTPUT
+          "package_name=TikTokDailyReport_${tagVersion}_windows" >> $env:GITHUB_OUTPUT
+          "folder_name=TikTokDailyReport_${tagVersion}" >> $env:GITHUB_OUTPUT
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
