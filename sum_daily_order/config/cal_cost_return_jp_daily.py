@@ -865,7 +865,7 @@ def run_report(combo, config_df, exchange_rate):
         print(f"⚠️ [{display_name}] 没有有效数据，不生成报表。")
         return
 
-    # Sheet1: File Summary
+    # Sheet1: 文件汇总
     df_sku_detail = pd.DataFrame(daily_product_detail_list)
     df_daily_product = df_sku_detail.groupby(['文件名', '日期', '产品大类']).agg({
         '销量': 'sum',
@@ -909,7 +909,7 @@ def run_report(combo, config_df, exchange_rate):
             total_row[col] = df_daily_summary[col].sum()
     df_daily_summary = pd.concat([df_daily_summary, pd.DataFrame([total_row])], ignore_index=True)
 
-    # Sheet2: Daily Product Detail
+    # Sheet2: 日产品明细
     df_daily_product = df_daily_product.assign(temp_date=pd.to_datetime(df_daily_product['日期'])) \
         .sort_values(['temp_date', '文件名', '产品名称']) \
         .drop(columns=['temp_date'])
@@ -928,7 +928,7 @@ def run_report(combo, config_df, exchange_rate):
     df_product_quantity_by_period = build_product_quantity_by_period(product_quantity_records)
     df_daily_product_quantity_matrix = build_daily_product_quantity_matrix(df_daily_product)
 
-    # Sheet3: Product Quantity Matrix
+    # Sheet3: 产品销量矩阵
     df_quantity_records = pd.DataFrame(product_quantity_records)
     if not df_quantity_records.empty:
         df_quantity_matrix = df_quantity_records.pivot_table(
@@ -947,7 +947,7 @@ def run_report(combo, config_df, exchange_rate):
     else:
         df_quantity_matrix = pd.DataFrame([["无销量数据"]], columns=["提示"])
 
-    # Sheet4: Sample Statistics
+    # Sheet4: 样品统计
     df_sample_records = pd.DataFrame(sample_quantity_records)
     if not df_sample_records.empty:
         df_sample_matrix = df_sample_records.pivot_table(
@@ -971,21 +971,21 @@ def run_report(combo, config_df, exchange_rate):
         if not os.path.exists(os.path.dirname(output_filename)):
             os.makedirs(os.path.dirname(output_filename))
         with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
-            file_summary_sheet = 'File Summary'
+            file_summary_sheet = '文件汇总'
             df_file_summary_display = insert_blank_rows_between_files(df_product_profit_by_period)
             df_file_summary_display.to_excel(writer, sheet_name=file_summary_sheet, index=False)
             center_excel_sheet(writer, file_summary_sheet, len(df_file_summary_display) + 1, len(df_file_summary_display.columns))
 
-            detail_sheet = 'Daily Product Detail'
+            detail_sheet = '日产品明细'
             df_daily_product_quantity_matrix.to_excel(writer, sheet_name=detail_sheet, index=False)
             center_excel_sheet(writer, detail_sheet, len(df_daily_product_quantity_matrix) + 1, len(df_daily_product_quantity_matrix.columns))
 
-            sku_detail_sheet = 'SKU Detail'
+            sku_detail_sheet = 'SKU明细'
             df_sku_detail_display = insert_blank_rows_between_files(df_sku_detail)
             df_sku_detail_display.to_excel(writer, sheet_name=sku_detail_sheet, index=False)
             center_excel_sheet(writer, sku_detail_sheet, len(df_sku_detail_display) + 1, len(df_sku_detail_display.columns))
 
-            quantity_sheet = 'Product Quantity Matrix'
+            quantity_sheet = '产品销量矩阵'
             df_product_quantity_by_period.to_excel(writer, sheet_name=quantity_sheet, index=True)
             quantity_startrow = len(df_product_quantity_by_period) + 3
             df_quantity_matrix_display = insert_blank_rows_between_files(df_quantity_matrix)
@@ -995,12 +995,12 @@ def run_report(combo, config_df, exchange_rate):
             center_excel_sheet(writer, quantity_sheet, quantity_rows, quantity_cols)
 
             df_sample_matrix_display = insert_blank_rows_between_files(df_sample_matrix)
-            df_sample_matrix_display.to_excel(writer, sheet_name='Sample Statistics', index=False)
-            center_excel_sheet(writer, 'Sample Statistics', len(df_sample_matrix_display) + 1, len(df_sample_matrix_display.columns))
+            df_sample_matrix_display.to_excel(writer, sheet_name='样品统计', index=False)
+            center_excel_sheet(writer, '样品统计', len(df_sample_matrix_display) + 1, len(df_sample_matrix_display.columns))
 
             if period_comparison_frames:
                 startrow = 0
-                sheet_name = 'Period Comparison'
+                sheet_name = '周期对比'
                 max_cols = 0
                 for title, frame in period_comparison_frames:
                     frame.to_excel(writer, sheet_name=sheet_name, startrow=startrow, index=False)
@@ -1009,8 +1009,8 @@ def run_report(combo, config_df, exchange_rate):
                 center_excel_sheet(writer, sheet_name, startrow, max_cols)
             else:
                 period_hint = pd.DataFrame([{'提示': '周期对比需要至少 2 个有效 CSV 文件'}])
-                period_hint.to_excel(writer, sheet_name='Period Comparison', index=False)
-                center_excel_sheet(writer, 'Period Comparison', len(period_hint) + 1, len(period_hint.columns))
+                period_hint.to_excel(writer, sheet_name='周期对比', index=False)
+                center_excel_sheet(writer, '周期对比', len(period_hint) + 1, len(period_hint.columns))
         print(f"✅ [{display_name}] 处理完成，报表已保存至 {output_filename}")
 
         if unmatched_skus:
