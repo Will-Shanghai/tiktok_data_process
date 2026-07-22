@@ -14,7 +14,23 @@ from pathlib import Path
 import pandas as pd
 
 
-APP_VERSION = "v1.1.0"
+DEFAULT_APP_VERSION = "v1.1.0"
+
+
+def read_app_version():
+    if getattr(sys, "frozen", False):
+        version_file = Path(sys.executable).resolve().parent / "VERSION"
+    else:
+        version_file = Path(__file__).resolve().parent / "VERSION"
+
+    if version_file.exists():
+        version_text = version_file.read_text(encoding="utf-8").strip()
+        if version_text:
+            return version_text if version_text.startswith("v") else f"v{version_text}"
+    return DEFAULT_APP_VERSION
+
+
+APP_VERSION = read_app_version()
 
 
 DEFAULT_STORES = [

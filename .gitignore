@@ -38,6 +38,10 @@ cache/.DS_Store
 # 忽略 Python 缓存
 __pycache__/
 *.pyc
+build/
+dist/
+release/
+*.spec
 
 # 忽略本地缓存配置（由代码生成的 config_cache.pkl）
 config_cache.pkl

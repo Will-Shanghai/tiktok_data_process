@@ -64,7 +64,7 @@ Windows 打包后，建议给同事的目录结构是：
 
 ```text
 TikTokDailyReport/
-├── TikTokDailyReport_v1.1.0.exe
+├── TikTokDailyReport_v<版本号>.exe
 ├── config/
 │   ├── app_config.xlsx
 │   ├── .env                     # 需要在线读取飞书时才放
@@ -206,7 +206,7 @@ FEISHU_APP_SECRET=你的飞书应用Secret
 
 ```text
 TikTokDailyReport/
-├── TikTokDailyReport_v1.1.0.exe
+├── TikTokDailyReport_v<版本号>.exe
 └── config/
     ├── .env
     └── app_config.xlsx
@@ -222,6 +222,97 @@ TikTokDailyReport/
 ## Windows 打包
 
 建议在 Windows 电脑上打包。PyInstaller 不是跨平台编译器，所以 Windows exe 最好在 Windows 上生成。
+
+## 版本号管理
+
+项目根目录有一个单独的版本文件：
+
+```text
+VERSION
+```
+
+当前内容示例：
+
+```text
+1.1.0
+```
+
+版本规则：
+
+- 这里写 `1.1.0` 即可，不需要自己手动加 `v`
+- 程序运行时会显示成 `v1.1.0`
+- GitHub Actions 打包时会自动生成：
+  - `TikTokDailyReport_v1.1.0.exe`
+  - `TikTokDailyReport_v1.1.0_windows.zip`
+  - GitHub Release 标签 `v1.1.0`
+
+如果你要发新版本，最简单的方式就是先改这个文件，再提交代码。
+
+## GitHub Actions 自动打包与发布
+
+仓库已经预留了 GitHub Actions 工作流：
+
+```text
+.github/workflows/build-windows-exe.yml
+```
+
+它会在以下情况自动运行：
+
+- 推送到 `master`
+- 在 GitHub Actions 页面手动点击运行
+
+自动完成的事情：
+
+1. 校验 `main.py`、日本脚本、越南脚本语法
+2. 在 Windows 环境打包 exe
+3. 自动组装完整交付目录
+4. 自动压缩成 zip 包
+5. 上传到 Actions Artifact
+6. 自动创建或更新 GitHub Release
+7. 把 zip 包挂到 Release 页面
+8. 通过飞书机器人发送成功/失败通知
+
+### GitHub Release 说明
+
+自动发布后的交付包会出现在两个地方：
+
+- GitHub Actions 的 `Artifacts`
+- GitHub 仓库右侧的 `Releases`
+
+建议平时给同事发 `Release` 里的 zip 包，因为它更像正式版本。
+
+### 飞书机器人说明
+
+飞书机器人链接不要写死在代码或工作流文件里。  
+正确做法是放到 GitHub 仓库的 Actions Secrets 里，例如：
+
+```text
+FEISHU_BOT_WEBHOOK
+```
+
+这样仓库里不会暴露机器人地址。
+
+### 手动发版
+
+如果你希望手动指定一个版本号再打包，也可以在 GitHub 的 Actions 页面里手动运行工作流，并填写：
+
+```text
+release_version
+```
+
+例如填写：
+
+```text
+1.1.1
+```
+
+或者：
+
+```text
+v1.1.1
+```
+
+都可以。
 
 打包电脑需要先安装 Python，推荐安装：
 
@@ -253,7 +344,7 @@ py -3.11 --version
 Python 3.11.9
 ```
 
-注意：只有“打包 exe 的电脑”需要安装 Python。最终拿到 `TikTokDailyReport_v1.1.0.exe` 的普通同事不需要安装 Python。
+注意：只有“打包 exe 的电脑”需要安装 Python。最终拿到 `TikTokDailyReport_v<版本号>.exe` 的普通同事不需要安装 Python。
 
 下面说的“项目文件夹根目录”，指的是你解压/拉取代码后的这个文件夹，例如：
 
@@ -275,20 +366,20 @@ cd /d C:\Users\MAC\Desktop\tiktok_data_process
 py -3.11 -m venv .venv
 .venv\Scripts\activate
 pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
-pyinstaller --onefile --name TikTokDailyReport_v1.1.0 main.py
+pyinstaller --onefile --name TikTokDailyReport_v<版本号> main.py
 ```
 
 打包完成后，exe 通常在：
 
 ```text
-dist/TikTokDailyReport_v1.1.0.exe
+dist/TikTokDailyReport_v<版本号>.exe
 ```
 
 然后在 `dist` 里补齐外部目录：
 
 ```text
 dist/
-├── TikTokDailyReport_v1.1.0.exe
+├── TikTokDailyReport_v<版本号>.exe
 ├── config/
 ├── data/
 └── result/
@@ -336,7 +427,7 @@ dist/config/cache/
 最终同事只需要：
 
 1. 把订单 CSV 放进对应 `data` 子目录。
-2. 双击 `TikTokDailyReport_v1.1.0.exe`。
+2. 双击 `TikTokDailyReport_v<版本号>.exe`。
 3. 按菜单选择日本、越南或全部。
 4. 到 `result` 目录查看生成的 Excel。
 
@@ -355,7 +446,7 @@ python main.py --site all
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --name TikTokDailyReport_v1.1.0 main.py
+pyinstaller --onefile --name TikTokDailyReport_v<版本号> main.py
 ```
 
 macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用。
@@ -367,13 +458,13 @@ macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用�
 新版程序会自动生成默认配置。如果你仍看到这个提示，说明你运行的是旧 exe，请重新执行：
 
 ```bat
-pyinstaller --onefile --name TikTokDailyReport_v1.1.0 main.py
+pyinstaller --onefile --name TikTokDailyReport_v<版本号> main.py
 ```
 
 然后重新打开：
 
 ```text
-dist/TikTokDailyReport_v1.1.0.exe
+dist/TikTokDailyReport_v<版本号>.exe
 ```
 
 ### 提示某个目录下未找到文件

@@ -155,7 +155,7 @@ jobs:
           "url=$releaseUrl" >> $env:GITHUB_OUTPUT
 
       - name: Notify Feishu
-        if: ${{ always() && secrets.FEISHU_BOT_WEBHOOK != '' }}
+        if: ${{ always() }}
         env:
           FEISHU_BOT_WEBHOOK: ${{ secrets.FEISHU_BOT_WEBHOOK }}
           JOB_STATUS: ${{ job.status }}
@@ -167,6 +167,10 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
         shell: pwsh
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:FEISHU_BOT_WEBHOOK)) {
+            Write-Host "FEISHU_BOT_WEBHOOK 未配置，跳过飞书通知。"
+            exit 0
+          }
           if ($env:JOB_STATUS -eq "success") {
             if ([string]::IsNullOrWhiteSpace($env:RELEASE_URL)) {
               $downloadLine = "构建产物：$($env:RUN_URL)"
