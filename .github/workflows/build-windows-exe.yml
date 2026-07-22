@@ -161,42 +161,62 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           VERSION_TAG: ${{ steps.version.outputs.tag }}
           RELEASE_URL: ${{ steps.release.outputs.url }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          REPO_NAME: ${{ github.repository }}
-          BRANCH_NAME: ${{ github.ref_name }}
-          COMMIT_SHA: ${{ github.sha }}
+          JOBS_API_URL: ${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs
+          GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           if ([string]::IsNullOrWhiteSpace($env:FEISHU_BOT_WEBHOOK)) {
             Write-Host "FEISHU_BOT_WEBHOOK 未配置，跳过飞书通知。"
             exit 0
           }
+
+          $today = Get-Date -Format "yyyy-MM-dd"
+
           if ($env:JOB_STATUS -eq "success") {
             if ([string]::IsNullOrWhiteSpace($env:RELEASE_URL)) {
-              $downloadLine = "构建产物：$($env:RUN_URL)"
+              $downloadLine = "Release 下载：暂无"
             } else {
               $downloadLine = "Release 下载：$($env:RELEASE_URL)"
             }
             $text = @(
               "告警：TikTok Daily Report Windows 打包成功",
               "",
-              "仓库：$($env:REPO_NAME)",
-              "分支：$($env:BRANCH_NAME)",
               "版本：$($env:VERSION_TAG)",
               $downloadLine,
-              "运行记录：$($env:RUN_URL)",
-              "提交：$($env:COMMIT_SHA)"
+              "时间：$today"
             ) -join "`n"
           } else {
+            $reason = "未知错误"
+            try {
+              $headers = @{
+                Authorization = "Bearer $($env:GH_TOKEN)"
+                Accept        = "application/vnd.github+json"
+                "User-Agent"  = "GitHub Actions"
+              }
+              $jobsResponse = Invoke-RestMethod -Uri $env:JOBS_API_URL -Headers $headers -Method Get
+              foreach ($job in $jobsResponse.jobs) {
+                foreach ($step in $job.steps) {
+                  if ($step.conclusion -eq "failure") {
+                    $reason = "$($job.name) / $($step.name)"
+                    break
+                  }
+                }
+                if ($reason -ne "未知错误") {
+                  break
+                }
+                if ($job.conclusion -eq "failure") {
+                  $reason = $job.name
+                  break
+                }
+              }
+            } catch {
+              $reason = "获取失败原因时出错"
+            }
             $text = @(
               "告警：TikTok Daily Report Windows 打包失败",
               "",
-              "仓库：$($env:REPO_NAME)",
-              "分支：$($env:BRANCH_NAME)",
-              "版本：$($env:VERSION_TAG)",
-              "运行记录：$($env:RUN_URL)",
-              "提交：$($env:COMMIT_SHA)",
-              "请打开 Actions 查看报错。"
+              "原因：$reason",
+              "时间：$today"
             ) -join "`n"
           }
           $body = @{
