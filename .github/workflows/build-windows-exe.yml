@@ -135,13 +135,13 @@ jobs:
         run: |
           $tag = "${{ steps.version.outputs.tag }}"
           $title = "TikTok Daily Report $tag"
-          $notes = @"
-          Automated Windows build.
-
-          - Version: $tag
-          - Commit: ${{ github.sha }}
-          - Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          "@
+          $notes = @(
+            "Automated Windows build.",
+            "",
+            "- Version: $tag",
+            "- Commit: ${{ github.sha }}",
+            "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ) -join "`n"
 
           gh release view $tag 1>$null 2>$null
           if ($LASTEXITCODE -eq 0) {
@@ -173,27 +173,27 @@ jobs:
             } else {
               $downloadLine = "Release 下载：$($env:RELEASE_URL)"
             }
-            $text = @"
-TikTok Daily Report Windows 打包成功
-
-仓库：$($env:REPO_NAME)
-分支：$($env:BRANCH_NAME)
-版本：$($env:VERSION_TAG)
-$downloadLine
-运行记录：$($env:RUN_URL)
-提交：$($env:COMMIT_SHA)
-"@
+            $text = @(
+              "TikTok Daily Report Windows 打包成功",
+              "",
+              "仓库：$($env:REPO_NAME)",
+              "分支：$($env:BRANCH_NAME)",
+              "版本：$($env:VERSION_TAG)",
+              $downloadLine,
+              "运行记录：$($env:RUN_URL)",
+              "提交：$($env:COMMIT_SHA)"
+            ) -join "`n"
           } else {
-            $text = @"
-TikTok Daily Report Windows 打包失败
-
-仓库：$($env:REPO_NAME)
-分支：$($env:BRANCH_NAME)
-版本：$($env:VERSION_TAG)
-运行记录：$($env:RUN_URL)
-提交：$($env:COMMIT_SHA)
-请打开 Actions 查看报错。
-"@
+            $text = @(
+              "TikTok Daily Report Windows 打包失败",
+              "",
+              "仓库：$($env:REPO_NAME)",
+              "分支：$($env:BRANCH_NAME)",
+              "版本：$($env:VERSION_TAG)",
+              "运行记录：$($env:RUN_URL)",
+              "提交：$($env:COMMIT_SHA)",
+              "请打开 Actions 查看报错。"
+            ) -join "`n"
           }
           $body = @{
             msg_type = "text"
