@@ -1,0 +1,62 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
+
+      - name: Validate Python files
+        shell: pwsh
+        run: |
+          python -m py_compile main.py
+          python -m py_compile sum_daily_order/config/cal_cost_return_jp_daily.py
+          python -m py_compile sum_daily_order/config/cal_cost_return_vn_daily.py
+
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          pyinstaller --onefile --name TikTokDailyReport_v1.1.0 main.py
+
+      - name: Prepare package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          New-Item -ItemType Directory -Force -Path release/config | Out-Null
+          New-Item -ItemType Directory -Force -Path release/config/cache | Out-Null
+          New-Item -ItemType Directory -Force -Path release/data/data_JP/local | Out-Null
+          New-Item -ItemType Directory -Force -Path release/data/data_JP/cross-border | Out-Null
+          New-Item -ItemType Directory -Force -Path release/data/data_JP/direct | Out-Null
+          New-Item -ItemType Directory -Force -Path release/data/data_VN/local | Out-Null
+          New-Item -ItemType Directory -Force -Path release/data/data_VN/cross_border | Out-Null
+          New-Item -ItemType Directory -Force -Path release/data/data_MX/local | Out-Null
+          New-Item -ItemType Directory -Force -Path release/data/data_MX/direct | Out-Null
+          New-Item -ItemType Directory -Force -Path release/result | Out-Null
+          Copy-Item dist/TikTokDailyReport_v1.1.0.exe release/
+          Copy-Item README.md release/
+          Copy-Item TikTokDailyReport_使用说明.txt release/
+          Copy-Item sum_daily_order/config/app_config.xlsx release/config/
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TikTokDailyReport_v1.1.0_windows
+          path: release
