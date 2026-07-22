@@ -1,0 +1,31 @@
+version: "1.0"
+name: tiktok-daily-report-ci
+displayName: TikTok Daily Report CI
+stages:
+- name: build
+  displayName: 校验与打包
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: build@python
+    name: build_python
+    displayName: Python 校验与打包
+    pythonVersion: 3.9
+    commands:
+    - python3 -m pip install --upgrade pip
+    - pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+    - pip3 install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
+    - python3 -m py_compile main.py
+    - python3 -m py_compile sum_daily_order/config/cal_cost_return_jp_daily.py
+    - python3 -m py_compile sum_daily_order/config/cal_cost_return_vn_daily.py
+    - pyinstaller --onefile --name TikTokDailyReport_linux main.py
+    - mkdir -p release/config
+    - mkdir -p release/dist
+    - cp -r dist/* release/dist/ || true
+    - cp README.md release/ || true
+    - cp TikTokDailyReport_使用说明.txt release/ || true
+    - cp sum_daily_order/config/app_config.xlsx release/config/ || true
+    artifacts:
+    - name: BUILD_ARTIFACT
+      path:
+      - ./release
