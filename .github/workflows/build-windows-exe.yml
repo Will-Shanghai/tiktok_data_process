@@ -2,8 +2,22 @@ name: Build Windows EXE
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Optional version override, for example 1.1.1 or v1.1.1"
+        required: false
+        type: string
+      publish_release:
+        description: "Publish or update GitHub Release"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
 
 jobs:
   build-windows-exe:
@@ -13,10 +27,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $inputVersion = "${{ github.event.inputs.release_version }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($inputVersion)) {
+            if (Test-Path VERSION) {
+              $inputVersion = (Get-Content VERSION -Raw).Trim()
+            } else {
+              $inputVersion = "1.1.0"
+            }
+          }
+          $cleanVersion = $inputVersion.TrimStart('v', 'V')
+          if ([string]::IsNullOrWhiteSpace($cleanVersion)) {
+            throw "VERSION 文件为空，请填写版本号。"
+          }
+
+          $tagVersion = "v$cleanVersion"
+          Set-Content -Path VERSION -Value $cleanVersion -Encoding utf8
+
+          "clean=$cleanVersion" >> $env:GITHUB_OUTPUT
+          "tag=$tagVersion" >> $env:GITHUB_OUTPUT
+          "exe_base=TikTokDailyReport_$tagVersion" >> $env:GITHUB_OUTPUT
+          "exe_file=TikTokDailyReport_$tagVersion.exe" >> $env:GITHUB_OUTPUT
+          "package_name=TikTokDailyReport_$tagVersion_windows" >> $env:GITHUB_OUTPUT
+          "folder_name=TikTokDailyReport_$tagVersion" >> $env:GITHUB_OUTPUT
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
+
+      - name: Sync app version before build
+        shell: pwsh
+        run: |
+          $versionTag = "${{ steps.version.outputs.tag }}"
+          $content = Get-Content main.py -Raw
+          $content = [regex]::Replace($content, 'APP_VERSION\s*=\s*"v?[^"]+"', "APP_VERSION = `"$versionTag`"")
+          $content = [regex]::Replace($content, 'DEFAULT_APP_VERSION\s*=\s*"v?[^"]+"', "DEFAULT_APP_VERSION = `"$versionTag`"")
+          Set-Content -Path main.py -Value $content -Encoding utf8
 
       - name: Install dependencies
         shell: pwsh
@@ -34,29 +84,121 @@ jobs:
       - name: Build EXE
         shell: pwsh
         run: |
-          pyinstaller --onefile --name TikTokDailyReport_v1.1.0 main.py
+          pyinstaller --clean --onefile --name "${{ steps.version.outputs.exe_base }}" main.py
 
-      - name: Prepare package
+      - name: Prepare release folder
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path release | Out-Null
-          New-Item -ItemType Directory -Force -Path release/config | Out-Null
-          New-Item -ItemType Directory -Force -Path release/config/cache | Out-Null
-          New-Item -ItemType Directory -Force -Path release/data/data_JP/local | Out-Null
-          New-Item -ItemType Directory -Force -Path release/data/data_JP/cross-border | Out-Null
-          New-Item -ItemType Directory -Force -Path release/data/data_JP/direct | Out-Null
-          New-Item -ItemType Directory -Force -Path release/data/data_VN/local | Out-Null
-          New-Item -ItemType Directory -Force -Path release/data/data_VN/cross_border | Out-Null
-          New-Item -ItemType Directory -Force -Path release/data/data_MX/local | Out-Null
-          New-Item -ItemType Directory -Force -Path release/data/data_MX/direct | Out-Null
-          New-Item -ItemType Directory -Force -Path release/result | Out-Null
-          Copy-Item dist/TikTokDailyReport_v1.1.0.exe release/
-          Copy-Item README.md release/
-          Copy-Item TikTokDailyReport_使用说明.txt release/
-          Copy-Item sum_daily_order/config/app_config.xlsx release/config/
+          $root = "release/${{ steps.version.outputs.folder_name }}"
 
-      - name: Upload packaged artifact
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/config" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/config/cache" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_JP/local" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_JP/cross-border" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_JP/direct" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_VN/local" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_VN/cross_border" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_MX/local" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_MX/direct" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/result" | Out-Null
+
+          Copy-Item "dist/${{ steps.version.outputs.exe_file }}" "$root/"
+          Copy-Item "README.md" "$root/"
+          Copy-Item "TikTokDailyReport_使用说明.txt" "$root/"
+          Copy-Item "VERSION" "$root/"
+          Copy-Item "sum_daily_order/config/app_config.xlsx" "$root/config/"
+
+      - name: Create zip package
+        id: package
+        shell: pwsh
+        run: |
+          $zipPath = "release/${{ steps.version.outputs.package_name }}.zip"
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          Compress-Archive -Path "release/${{ steps.version.outputs.folder_name }}" -DestinationPath $zipPath
+          "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TikTokDailyReport_v1.1.0_windows
-          path: release
+          name: ${{ steps.version.outputs.package_name }}
+          path: ${{ steps.package.outputs.zip_path }}
+
+      - name: Publish GitHub Release
+        id: release
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $title = "TikTok Daily Report $tag"
+          $notes = @"
+          Automated Windows build.
+
+          - Version: $tag
+          - Commit: ${{ github.sha }}
+          - Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          "@
+
+          gh release view $tag 1>$null 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release edit $tag --title $title --notes $notes
+            gh release upload $tag "${{ steps.package.outputs.zip_path }}" --clobber
+          } else {
+            gh release create $tag "${{ steps.package.outputs.zip_path }}" --title $title --notes $notes
+          }
+
+          $releaseUrl = gh release view $tag --json url --jq .url
+          "url=$releaseUrl" >> $env:GITHUB_OUTPUT
+
+      - name: Notify Feishu
+        if: ${{ always() && secrets.FEISHU_BOT_WEBHOOK != '' }}
+        env:
+          FEISHU_BOT_WEBHOOK: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+          JOB_STATUS: ${{ job.status }}
+          VERSION_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO_NAME: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        shell: pwsh
+        run: |
+          if ($env:JOB_STATUS -eq "success") {
+            if ([string]::IsNullOrWhiteSpace($env:RELEASE_URL)) {
+              $downloadLine = "构建产物：$($env:RUN_URL)"
+            } else {
+              $downloadLine = "Release 下载：$($env:RELEASE_URL)"
+            }
+            $text = @"
+TikTok Daily Report Windows 打包成功
+
+仓库：$($env:REPO_NAME)
+分支：$($env:BRANCH_NAME)
+版本：$($env:VERSION_TAG)
+$downloadLine
+运行记录：$($env:RUN_URL)
+提交：$($env:COMMIT_SHA)
+"@
+          } else {
+            $text = @"
+TikTok Daily Report Windows 打包失败
+
+仓库：$($env:REPO_NAME)
+分支：$($env:BRANCH_NAME)
+版本：$($env:VERSION_TAG)
+运行记录：$($env:RUN_URL)
+提交：$($env:COMMIT_SHA)
+请打开 Actions 查看报错。
+"@
+          }
+          $body = @{
+            msg_type = "text"
+            content = @{
+              text = $text
+            }
+          } | ConvertTo-Json -Depth 5
+          Invoke-RestMethod -Uri $env:FEISHU_BOT_WEBHOOK -Method Post -ContentType "application/json" -Body $body
