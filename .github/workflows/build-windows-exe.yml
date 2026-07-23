@@ -99,12 +99,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$root/data/data_JP/direct" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/data/data_VN/local" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/data/data_VN/cross_border" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/data/data_MX/local" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/data/data_MX/direct" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/result" | Out-Null
 
           Copy-Item "dist/${{ steps.version.outputs.exe_file }}" "$root/"
-          Copy-Item "README.md" "$root/"
           Copy-Item "TikTokDailyReport_使用说明.txt" "$root/"
           Copy-Item "VERSION" "$root/"
           Copy-Item "sum_daily_order/config/app_config.xlsx" "$root/config/"
