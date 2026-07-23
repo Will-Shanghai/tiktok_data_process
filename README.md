@@ -54,9 +54,6 @@ sum_daily_order/
 │   └── data_VN/
 │       ├── local/
 │       └── cross_border/
-│   └── data_MX/
-│       ├── local/
-│       └── direct/
 └── result/                      # 报表输出目录
 ```
 
@@ -77,9 +74,6 @@ TikTokDailyReport/
 │   └── data_VN/
 │       ├── local/
 │       └── cross_border/
-│   └── data_MX/
-│       ├── local/
-│       └── direct/
 └── result/
 ```
 
@@ -165,15 +159,6 @@ sum_daily_order/data/data_JP/direct/
 sum_daily_order/data/data_VN/cross_border/
 ```
 
-墨西哥目录已预留：
-
-```text
-sum_daily_order/data/data_MX/local/
-sum_daily_order/data/data_MX/direct/
-```
-
-注意：墨西哥店铺在 `app_config.xlsx` 中默认 `enabled=0`，目前不会运行日报计算。
-
 一个目录下可以放多个 CSV。程序会：
 
 - 按 CSV 文件和日期生成日报汇总，避免多个文件日期重叠时重复混算
@@ -244,11 +229,12 @@ VERSION
 - GitHub Actions 打包时会自动生成：
   - `TikTokDailyReport_v1.1.0.exe`
   - `TikTokDailyReport_v1.1.0_windows.zip`
-  - GitHub Release 标签 `v1.1.0`
+  - 七牛归档文件 `tiktok-daily-report/archive/20260723/TikTokDailyReport_v1.1.0_windows.zip`
+  - 七牛固定文件 `tiktok-daily-report/latest/TikTokDailyReport_latest.zip`
 
 如果你要发新版本，最简单的方式就是先改这个文件，再提交代码。
 
-## GitHub Actions 自动打包与发布
+## GitHub Actions 自动打包与上传
 
 仓库已经预留了 GitHub Actions 工作流：
 
@@ -265,21 +251,26 @@ VERSION
 
 1. 校验 `main.py`、日本脚本、越南脚本语法
 2. 在 Windows 环境打包 exe
-3. 自动组装完整交付目录
+3. 自动组装只包含日报工具的交付目录
 4. 自动压缩成 zip 包
 5. 上传到 Actions Artifact
-6. 自动创建或更新 GitHub Release
-7. 把 zip 包挂到 Release 页面
+6. 上传 zip 到七牛云
+7. 同时保留一个带日期的归档包和一个 `latest` 固定下载包
 8. 通过飞书机器人发送成功/失败通知
 
-### GitHub Release 说明
+### 七牛下载说明
 
-自动发布后的交付包会出现在两个地方：
+自动打包后的交付包会出现在两个地方：
 
 - GitHub Actions 的 `Artifacts`
-- GitHub 仓库右侧的 `Releases`
+- 七牛云对象存储
 
-建议平时给同事发 `Release` 里的 zip 包，因为它更像正式版本。
+交付包里只保留日报工具本身需要的文件，不再附带广告/商品卡/订单分析等旧模块目录。
+
+建议平时给同事发飞书通知里的七牛下载链接：
+
+- `latest` 链接：给同事日常下载，永远指向最新版
+- `archive` 链接：给你自己留历史版本备份
 
 ### 飞书机器人说明
 
@@ -292,12 +283,53 @@ FEISHU_BOT_WEBHOOK
 
 这样仓库里不会暴露机器人地址。
 
+### 七牛 Secrets 说明
+
+七牛的 AccessKey / SecretKey / Bucket / 下载域名，也不要写死在代码或工作流文件里。  
+正确做法是放到 GitHub 仓库的 Actions Secrets 里：
+
+```text
+QINIU_ACCESS_KEY
+QINIU_SECRET_KEY
+QINIU_BUCKET
+QINIU_REGION
+QINIU_DOWNLOAD_DOMAIN
+QINIU_KEY_PREFIX
+```
+
+建议填写方式：
+
+```text
+QINIU_ACCESS_KEY       七牛 AccessKey
+QINIU_SECRET_KEY       七牛 SecretKey
+QINIU_BUCKET           你的空间名，例如 hubstudio-tools
+QINIU_REGION           你的存储区域，例如 z0 或 华东-浙江（当前工作流仅作记录）
+QINIU_DOWNLOAD_DOMAIN  下载域名，测试阶段可以先填七牛控制台显示的测试域名
+QINIU_KEY_PREFIX       可选，默认 tiktok-daily-report
+```
+
+如果 `QINIU_DOWNLOAD_DOMAIN` 暂时不填，工作流仍然可以上传文件到七牛，但飞书消息里不会生成可点击的下载链接。
+
+注意：
+
+- 七牛测试域名只建议用于联调，不建议长期正式发给同事
+- 正式上线时，建议后面补一个自定义下载域名
+- 当前工作流会上传两个对象：
+  - `archive/日期/文件名.zip`
+  - `latest/TikTokDailyReport_latest.zip`
+
 ### 手动发版
 
 如果你希望手动指定一个版本号再打包，也可以在 GitHub 的 Actions 页面里手动运行工作流，并填写：
 
 ```text
 release_version
+```
+
+另外还可以控制：
+
+```text
+upload_qiniu
 ```
 
 例如填写：
