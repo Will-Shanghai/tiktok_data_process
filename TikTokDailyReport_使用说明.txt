@@ -29,7 +29,7 @@ TikTokDailyReport 使用说明
 
 所以这个利润只能用来快速判断产品是否还有毛利空间，不能直接当成最终利润或财务结算利润。
 
-目前支持：
+当前交付包默认支持：
 
 1. 日本站
    - 本土店
@@ -40,13 +40,8 @@ TikTokDailyReport 使用说明
    - 本土店
    - 跨境店
 
-3. 墨西哥站
-   - 本土店
-   - 直邮店
-
-   注意：
-   墨西哥目录已经预留，但目前默认不运行。
-   等墨西哥日报脚本接入后，再启用墨西哥店铺。
+3. 当前发给同事的压缩包只保留日本站和越南站日报所需目录。
+   广告、商品卡、点击订单等其他旧模块目录不会打进压缩包。
 
 
 二、文件夹结构说明
@@ -87,13 +82,6 @@ TikTokDailyReport
 │     │
 │     └─ cross_border
 │        越南跨境店订单 CSV 放这里。
-│
-│  └─ data_MX
-│     ├─ local
-│     │  墨西哥本土店订单 CSV 放这里。
-│     │
-│     └─ direct
-│        墨西哥直邮店订单 CSV 放这里。
 │
 └─ result
    程序生成的 Excel 报表会放在这里。
@@ -167,14 +155,8 @@ TikTokDailyReport
    - 日本直邮店订单必须放到 data\data_JP\direct
    - 越南本土店订单必须放到 data\data_VN\local
    - 越南跨境店订单必须放到 data\data_VN\cross_border
-   - 墨西哥本土店订单必须放到 data\data_MX\local
-   - 墨西哥直邮店订单必须放到 data\data_MX\direct
-
    不同店铺的物流成本、寄样成本、部分产品成本可能不一样。
    如果把日本直邮店订单放进日本本土店目录，程序会按本土店成本计算，结果会不准确。
-
-   注意：
-   墨西哥目录目前只是预留，默认不会运行计算。
 
 4. 把 TikTok Shop 导出的订单 CSV 文件放进去。
 
@@ -204,8 +186,7 @@ TikTokDailyReport
    请选择要运行的站点：
    1. 日本 JP
    2. 越南 VN
-   3. 墨西哥 MX（目录已预留，日报脚本接入后使用）
-   4. 全部 all
+   3. 全部 all
    请输入数字后回车:
 
 3. 根据需要输入数字，然后按回车。
@@ -217,10 +198,6 @@ TikTokDailyReport
    只运行越南站。
 
    输入 3：
-   选择墨西哥。
-   注意：墨西哥目前只是预留，会提示暂不运行。
-
-   输入 4：
    日本和越南都运行。
 
 4. 等待程序运行完成。
@@ -253,16 +230,6 @@ Daily_Performance_Report_VN_local.xlsx
 
 越南跨境店：
 Daily_Performance_Report_VN_cross_border.xlsx
-
-墨西哥本土店：
-Daily_Performance_Report_MX_local.xlsx
-
-墨西哥直邮店：
-Daily_Performance_Report_MX_direct.xlsx
-
-注意：
-墨西哥目前只是预留目录和配置，默认不会生成上述报表。
-
 
 六、报表里的 Sheet 说明
 -----------------------
