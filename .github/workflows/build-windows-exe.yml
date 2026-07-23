@@ -146,6 +146,10 @@ jobs:
             $keyPrefix = "tiktok-daily-report"
           }
 
+          if ([string]::IsNullOrWhiteSpace($env:QINIU_DOWNLOAD_DOMAIN)) {
+            $env:QINIU_DOWNLOAD_DOMAIN = "http://til39in4x.hd-bkt.clouddn.com"
+          }
+
           $zipPath = "${{ steps.package.outputs.zip_path }}"
           $zipName = [System.IO.Path]::GetFileName($zipPath)
           $versionTag = "${{ steps.version.outputs.tag }}"
