@@ -10,14 +10,14 @@ on:
         description: "Optional version override, for example 1.1.1 or v1.1.1"
         required: false
         type: string
-      publish_release:
-        description: "Publish or update GitHub Release"
+      upload_qiniu:
+        description: "Upload package to Qiniu"
         required: true
         default: true
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-windows-exe:
@@ -72,7 +72,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
+          pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller qiniu
 
       - name: Validate Python files
         shell: pwsh
@@ -126,33 +126,89 @@ jobs:
           name: ${{ steps.version.outputs.package_name }}
           path: ${{ steps.package.outputs.zip_path }}
 
-      - name: Publish GitHub Release
-        id: release
-        if: ${{ github.event_name == 'push' || github.event.inputs.publish_release == 'true' }}
+      - name: Upload package to Qiniu
+        id: qiniu
+        if: ${{ github.event_name == 'push' || github.event.inputs.upload_qiniu == 'true' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+          QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+          QINIU_REGION: ${{ secrets.QINIU_REGION }}
+          QINIU_DOWNLOAD_DOMAIN: ${{ secrets.QINIU_DOWNLOAD_DOMAIN }}
+          QINIU_KEY_PREFIX: ${{ secrets.QINIU_KEY_PREFIX }}
         shell: pwsh
         run: |
-          $tag = "${{ steps.version.outputs.tag }}"
-          $title = "TikTok Daily Report $tag"
-          $notes = @(
-            "Automated Windows build.",
-            "",
-            "- Version: $tag",
-            "- Commit: ${{ github.sha }}",
-            "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          ) -join "`n"
-
-          gh release view $tag 1>$null 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            gh release edit $tag --title $title --notes $notes
-            gh release upload $tag "${{ steps.package.outputs.zip_path }}" --clobber
-          } else {
-            gh release create $tag "${{ steps.package.outputs.zip_path }}" --title $title --notes $notes
+          if ([string]::IsNullOrWhiteSpace($env:QINIU_ACCESS_KEY) -or
+              [string]::IsNullOrWhiteSpace($env:QINIU_SECRET_KEY) -or
+              [string]::IsNullOrWhiteSpace($env:QINIU_BUCKET)) {
+            throw "七牛 Secrets 未配置完整，请至少提供 QINIU_ACCESS_KEY、QINIU_SECRET_KEY、QINIU_BUCKET。"
           }
 
-          $releaseUrl = gh release view $tag --json url --jq .url
-          "url=$releaseUrl" >> $env:GITHUB_OUTPUT
+          $keyPrefix = $env:QINIU_KEY_PREFIX
+          if ([string]::IsNullOrWhiteSpace($keyPrefix)) {
+            $keyPrefix = "tiktok-daily-report"
+          }
+
+          $zipPath = "${{ steps.package.outputs.zip_path }}"
+          $zipName = [System.IO.Path]::GetFileName($zipPath)
+          $versionTag = "${{ steps.version.outputs.tag }}"
+          $dateStamp = Get-Date -Format "yyyyMMdd"
+          $archiveKey = "$keyPrefix/archive/$dateStamp/$zipName"
+          $latestKey = "$keyPrefix/latest/TikTokDailyReport_latest.zip"
+
+          $script = @'
+from pathlib import Path
+from urllib.parse import quote
+import os
+
+from qiniu import Auth, put_file
+
+
+def build_download_url(domain: str, key: str) -> str:
+    domain = (domain or "").strip()
+    if not domain:
+        return ""
+    if domain.startswith("http://") or domain.startswith("https://"):
+        base = domain.rstrip("/")
+    else:
+        base = f"https://{domain.rstrip('/')}"
+    return f"{base}/{quote(key)}"
+
+
+access_key = os.environ["QINIU_ACCESS_KEY"]
+secret_key = os.environ["QINIU_SECRET_KEY"]
+bucket_name = os.environ["QINIU_BUCKET"]
+download_domain = os.environ.get("QINIU_DOWNLOAD_DOMAIN", "").strip()
+file_path = Path(os.environ["QINIU_UPLOAD_FILE"]).resolve()
+archive_key = os.environ["QINIU_ARCHIVE_KEY"]
+latest_key = os.environ["QINIU_LATEST_KEY"]
+
+q = Auth(access_key, secret_key)
+
+for object_key in (archive_key, latest_key):
+    token = q.upload_token(bucket_name, object_key, 3600)
+    ret, info = put_file(token, object_key, str(file_path), version="v2")
+    status_code = getattr(info, "status_code", None)
+    if status_code != 200:
+        raise RuntimeError(f"Qiniu upload failed for {object_key}, status={status_code}, ret={ret}")
+
+archive_url = build_download_url(download_domain, archive_key)
+latest_url = build_download_url(download_domain, latest_key)
+
+github_output = Path(os.environ["GITHUB_OUTPUT"])
+with github_output.open("a", encoding="utf-8") as fh:
+    fh.write(f"archive_key={archive_key}\n")
+    fh.write(f"latest_key={latest_key}\n")
+    fh.write(f"archive_url={archive_url}\n")
+    fh.write(f"latest_url={latest_url}\n")
+'@
+
+          Set-Content -Path qiniu_upload.py -Value $script -Encoding utf8
+          $env:QINIU_UPLOAD_FILE = (Resolve-Path $zipPath).Path
+          $env:QINIU_ARCHIVE_KEY = $archiveKey
+          $env:QINIU_LATEST_KEY = $latestKey
+          python qiniu_upload.py
+          Remove-Item qiniu_upload.py -Force
 
       - name: Notify Feishu
         if: ${{ always() }}
@@ -160,7 +216,8 @@ jobs:
           FEISHU_BOT_WEBHOOK: ${{ secrets.FEISHU_BOT_WEBHOOK }}
           JOB_STATUS: ${{ job.status }}
           VERSION_TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_URL: ${{ steps.release.outputs.url }}
+          QINIU_ARCHIVE_URL: ${{ steps.qiniu.outputs.archive_url }}
+          QINIU_LATEST_URL: ${{ steps.qiniu.outputs.latest_url }}
           JOBS_API_URL: ${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
@@ -173,10 +230,12 @@ jobs:
           $today = Get-Date -Format "yyyy-MM-dd"
 
           if ($env:JOB_STATUS -eq "success") {
-            if ([string]::IsNullOrWhiteSpace($env:RELEASE_URL)) {
-              $downloadLine = "Release 下载：暂无"
+            if (-not [string]::IsNullOrWhiteSpace($env:QINIU_LATEST_URL)) {
+              $downloadLine = "下载链接：$($env:QINIU_LATEST_URL)"
+            } elseif (-not [string]::IsNullOrWhiteSpace($env:QINIU_ARCHIVE_URL)) {
+              $downloadLine = "下载链接：$($env:QINIU_ARCHIVE_URL)"
             } else {
-              $downloadLine = "Release 下载：$($env:RELEASE_URL)"
+              $downloadLine = "下载链接：已打包成功，但七牛下载链接暂未生成"
             }
             $text = @(
               "告警：TikTok Daily Report Windows 打包成功",
