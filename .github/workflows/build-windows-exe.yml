@@ -161,10 +161,12 @@ jobs:
 
           if ($env:JOB_STATUS -eq "success") {
             $text = @(
-              "告警：TikTok Daily Report Windows 打包成功",
+              "提醒：TikTok Daily Report Windows 有更新",
               "",
               "版本：$($env:VERSION_TAG)",
               "Release 下载：$($env:RELEASE_URL)",
+              "下载包：请打开 Release 页面，在 Assets 区域下载 TikTokDailyReport_$($env:VERSION_TAG)_windows.zip",
+              "访问说明：GitHub 可能需要外网环境才能打开",
               "时间：$today"
             ) -join "`n"
           } else {
