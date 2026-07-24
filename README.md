@@ -227,8 +227,7 @@ VERSION
 - GitHub Actions 打包时会自动生成：
   - `TikTokDailyReport_v1.1.0.exe`
   - `TikTokDailyReport_v1.1.0_windows.zip`
-  - 七牛归档文件 `tiktok-daily-report/archive/20260723/TikTokDailyReport_v1.1.0_windows.zip`
-  - 七牛固定文件 `tiktok-daily-report/latest/TikTokDailyReport_latest.zip`
+  - GitHub Release 附件 `TikTokDailyReport_v1.1.0_windows.zip`
 
 如果你要发新版本，最简单的方式就是先改这个文件，再提交代码。
 
@@ -252,23 +251,26 @@ VERSION
 3. 自动组装只包含日报工具的交付目录
 4. 自动压缩成 zip 包
 5. 上传到 Actions Artifact
-6. 上传 zip 到七牛云
-7. 同时保留一个带日期的归档包和一个 `latest` 固定下载包
+6. 创建或更新 GitHub Release
+7. 把 zip 包挂到 GitHub Release 的 Assets 附件里
 8. 通过飞书机器人发送成功/失败通知
 
-### 七牛下载说明
+### Release 下载说明
 
 自动打包后的交付包会出现在两个地方：
 
 - GitHub Actions 的 `Artifacts`
-- 七牛云对象存储
+- GitHub Release 的 `Assets`
 
 交付包里只保留日报工具本身需要的文件，不再附带广告/商品卡/订单分析等旧模块目录。
 
-建议平时给同事发飞书通知里的七牛下载链接：
+建议平时给同事发飞书通知里的 Release 链接。打开 Release 页面后：
 
-- `latest` 链接：给同事日常下载，永远指向最新版
-- `archive` 链接：给你自己留历史版本备份
+1. 找到页面下方的 `Assets`
+2. 下载 `TikTokDailyReport_v<版本号>_windows.zip`
+3. 不要下载 `Source code (zip)` 或 `Source code (tar.gz)`
+
+`Source code` 是 GitHub 自动生成的源码包，不是给同事使用的工具包。
 
 ### 飞书机器人说明
 
@@ -281,53 +283,12 @@ FEISHU_BOT_WEBHOOK
 
 这样仓库里不会暴露机器人地址。
 
-### 七牛 Secrets 说明
-
-七牛的 AccessKey / SecretKey / Bucket / 下载域名，也不要写死在代码或工作流文件里。  
-正确做法是放到 GitHub 仓库的 Actions Secrets 里：
-
-```text
-QINIU_ACCESS_KEY
-QINIU_SECRET_KEY
-QINIU_BUCKET
-QINIU_REGION
-QINIU_DOWNLOAD_DOMAIN
-QINIU_KEY_PREFIX
-```
-
-建议填写方式：
-
-```text
-QINIU_ACCESS_KEY       七牛 AccessKey
-QINIU_SECRET_KEY       七牛 SecretKey
-QINIU_BUCKET           你的空间名，例如 hubstudio-tools
-QINIU_REGION           你的存储区域，例如 z0 或 华东-浙江（当前工作流仅作记录）
-QINIU_DOWNLOAD_DOMAIN  下载域名，测试阶段可以先填七牛控制台显示的测试域名
-QINIU_KEY_PREFIX       可选，默认 tiktok-daily-report
-```
-
-如果 `QINIU_DOWNLOAD_DOMAIN` 暂时不填，工作流仍然可以上传文件到七牛，但飞书消息里不会生成可点击的下载链接。
-
-注意：
-
-- 七牛测试域名只建议用于联调，不建议长期正式发给同事
-- 正式上线时，建议后面补一个自定义下载域名
-- 当前工作流会上传两个对象：
-  - `archive/日期/文件名.zip`
-  - `latest/TikTokDailyReport_latest.zip`
-
 ### 手动发版
 
 如果你希望手动指定一个版本号再打包，也可以在 GitHub 的 Actions 页面里手动运行工作流，并填写：
 
 ```text
 release_version
-```
-
-另外还可以控制：
-
-```text
-upload_qiniu
 ```
 
 例如填写：
