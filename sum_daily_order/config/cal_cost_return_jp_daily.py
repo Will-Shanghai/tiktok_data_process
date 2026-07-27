@@ -509,9 +509,10 @@ def build_period_comparison_frames(df_daily_product, daily_order_records):
     return frames
 
 def center_excel_sheet(writer, sheet_name, row_count, col_count):
-    """把已写入的工作表区域设置为居中显示。"""
+    """把已写入的工作表区域设置为居中显示，并冻结首行。"""
     worksheet = writer.sheets[sheet_name]
     if hasattr(worksheet, "set_column"):
+        worksheet.freeze_panes(1, 0)
         if not hasattr(writer, "_center_format"):
             writer._center_format = writer.book.add_format({"align": "center", "valign": "vcenter"})
         center_format = writer._center_format
@@ -520,6 +521,7 @@ def center_excel_sheet(writer, sheet_name, row_count, col_count):
             worksheet.set_row(row_idx, None, center_format)
         return
 
+    worksheet.freeze_panes = "A2"
     center_alignment = Alignment(horizontal="center", vertical="center")
     for row in worksheet.iter_rows(min_row=1, max_row=row_count, min_col=1, max_col=col_count):
         for cell in row:
