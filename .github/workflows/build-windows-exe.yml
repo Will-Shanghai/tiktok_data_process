@@ -69,32 +69,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
 
-      - name: Prepare Feishu config cache
-        shell: pwsh
-        env:
-          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:FEISHU_APP_ID) -or
-              [string]::IsNullOrWhiteSpace($env:FEISHU_APP_SECRET)) {
-            throw "缺少 GitHub Actions Secrets：FEISHU_APP_ID / FEISHU_APP_SECRET，无法打包带飞书凭证和缓存的版本。"
-          }
-
-          New-Item -ItemType Directory -Force -Path "sum_daily_order/config/cache" | Out-Null
-          New-Item -ItemType Directory -Force -Path "sum_daily_order/data" | Out-Null
-          New-Item -ItemType Directory -Force -Path "sum_daily_order/result" | Out-Null
-
-          $envLines = @(
-            "FEISHU_APP_ID=$($env:FEISHU_APP_ID)",
-            "FEISHU_APP_SECRET=$($env:FEISHU_APP_SECRET)"
-          )
-          Set-Content -Path "sum_daily_order/config/.env" -Value $envLines -Encoding utf8
-
-          $env:USE_CONFIG_CACHE_FIRST = "0"
-          python -c "from sum_daily_order.config import cal_cost_return_jp_daily as jp; from sum_daily_order.config import cal_cost_return_vn_daily as vn; [jp.get_config_dataframe(s['sheet_name'], force_refresh=True) for s in jp.JAPAN_STORES if s.get('enabled')]; [vn.get_config_dataframe(s['sheet_name'], force_refresh=True) for s in vn.VIETNAM_STORES if s.get('enabled')]"
-
-          Remove-Item "sum_daily_order/config/.env" -Force
-
       - name: Validate Python files
         shell: pwsh
         run: |
@@ -117,7 +91,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$root/config/cache" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/data/data_JP/local" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/data/data_JP/cross-border" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/data/data_JP/direct" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_JP/direct_old" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$root/data/data_JP/direct_new" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/data/data_VN/local" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/data/data_VN/cross_border" | Out-Null
           New-Item -ItemType Directory -Force -Path "$root/result" | Out-Null
@@ -126,7 +101,8 @@ jobs:
           Copy-Item "TikTokDailyReport_使用说明.txt" "$root/"
           Copy-Item "VERSION" "$root/"
           Copy-Item "sum_daily_order/config/app_config.xlsx" "$root/config/"
-          Copy-Item "sum_daily_order/config/cache/*" "$root/config/cache/" -Force
+          Copy-Item "sum_daily_order/config/.env.example" "$root/config/" -Force
+          Copy-Item "sum_daily_order/config/cache/*" "$root/config/cache/" -Force -ErrorAction SilentlyContinue
 
       - name: Create zip package
         id: package
@@ -161,13 +137,14 @@ jobs:
             下载说明：
             1. 请在本页面下方 Assets 区域下载 `${{ steps.version.outputs.package_name }}.zip`。
             2. 下载后先解压，再双击里面的 `TikTokDailyReport_${{ steps.version.outputs.tag }}.exe` 运行。
-            3. CSV 订单文件请放到对应店铺目录，例如 `data/data_JP/direct` 或 `data/data_VN/cross_border`。
+            3. CSV 订单文件请放到对应店铺目录，例如 `data/data_JP/direct_old`、`data/data_JP/direct_new` 或 `data/data_VN/cross_border`。
             4. 报表会生成到 `result` 文件夹。
+            5. 如果需要在线读取飞书配置，请把 `.env` 放到 `config/.env`，格式参考 `config/.env.example`。
 
             注意：
             - 不要下载 Source code 压缩包，那个是 GitHub 自动生成的源码包，不是给同事使用的工具包。
             - 如果浏览器提示文件风险，请确认下载的是上面的 Windows 工具 zip 包。
-            - 工具包已内置打包时从飞书同步的配置缓存；出于密钥安全考虑，不内置 `.env`。
+            - 工具包默认不内置真实 `.env`；如需在线刷新飞书配置，请自行放入 `config/.env`。
 
       - name: Notify Feishu
         if: ${{ always() }}
@@ -194,6 +171,7 @@ jobs:
               "版本：$($env:VERSION_TAG)",
               "Release 下载：$($env:RELEASE_URL)",
               "下载包：请打开 Release 页面，在 Assets 区域下载 TikTokDailyReport_$($env:VERSION_TAG)_windows.zip",
+              "说明：如需在线读取飞书配置，请把 .env 放到 config/.env，格式参考 config/.env.example",
               "访问说明：GitHub 可能需要外网环境才能打开",
               "时间：$today"
             ) -join "`n"

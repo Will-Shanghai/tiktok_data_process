@@ -48,7 +48,8 @@ sum_daily_order/
 │   ├── data_JP/
 │   │   ├── local/
 │   │   ├── cross-border/
-│   │   └── direct/
+│   │   ├── direct_old/
+│   │   └── direct_new/
 │   └── data_VN/
 │       ├── local/
 │       └── cross_border/
@@ -68,7 +69,8 @@ TikTokDailyReport/
 │   ├── data_JP/
 │   │   ├── local/
 │   │   ├── cross-border/
-│   │   └── direct/
+│   │   ├── direct_old/
+│   │   └── direct_new/
 │   └── data_VN/
 │       ├── local/
 │       └── cross_border/
@@ -181,13 +183,13 @@ sum_daily_order/data/data_VN/cross_border/
 config/cache/
 ```
 
-GitHub Actions 自动打包时，会用 GitHub Secrets 临时连接飞书，并把最新配置缓存写入交付包：
+GitHub Actions 自动打包时，默认只负责生成 exe 和交付包，不会把真实 `.env` 打进去：
 
 ```text
 config/cache/
 ```
 
-所以普通同事下载 Release 包后，即使电脑网络无法连接飞书，也可以直接使用缓存运行。
+所以普通同事下载 Release 包后，只要把 `.env` 放到 `config/.env`，就可以在线读取飞书配置。
 
 如果你自己需要在本机运行时在线刷新飞书配置，请在 `config/.env` 中配置飞书应用凭证：
 
@@ -198,7 +200,7 @@ FEISHU_APP_SECRET=你的飞书应用Secret
 
 如果没有 `.env`，但 `config/cache/` 中已有对应配置缓存，程序仍可以运行。
 
-`.env` 是密钥文件，不要提交到 Git，不要写进代码，不要放进公开 Release，也不要发到公开群。Release 包默认只带缓存，不带真实 `.env`。
+`.env` 是密钥文件，不要提交到 Git，不要写进代码，不要放进公开 Release，也不要发到公开群。Release 包默认不带真实 `.env`。
 
 运行时规则：
 
@@ -253,11 +255,10 @@ VERSION
 2. 在 Windows 环境打包 exe
 3. 自动组装只包含日报工具的交付目录
 4. 自动压缩成 zip 包
-5. 使用 GitHub Secrets 临时连接飞书，刷新 `config/cache/`
-6. 上传到 Actions Artifact
-7. 创建或更新 GitHub Release
-8. 把 zip 包挂到 GitHub Release 的 Assets 附件里
-9. 通过飞书机器人发送成功/失败通知
+5. 上传到 Actions Artifact
+6. 创建或更新 GitHub Release
+7. 把 zip 包挂到 GitHub Release 的 Assets 附件里
+8. 通过飞书机器人发送成功/失败通知
 
 ### Release 下载说明
 
@@ -267,7 +268,7 @@ VERSION
 - GitHub Release 的 `Assets`
 
 交付包里只保留日报工具本身需要的文件，不再附带广告/商品卡/订单分析等旧模块目录。
-交付包会包含打包时从飞书同步的 `config/cache/`，但不会包含真实 `.env` 密钥文件。
+交付包会包含 `config/.env.example`，但不会包含真实 `.env` 密钥文件。
 
 建议平时给同事发飞书通知里的 Release 链接。打开 Release 页面后：
 
@@ -277,6 +278,8 @@ VERSION
 
 `Source code` 是 GitHub 自动生成的源码包，不是给同事使用的工具包。
 
+如果你希望在线读取飞书配置，请把 `.env` 放到 `config/.env`，内容格式参考 `config/.env.example`。
+
 ### 飞书机器人说明
 
 飞书机器人链接不要写死在代码或工作流文件里。  
@@ -284,11 +287,9 @@ VERSION
 
 ```text
 FEISHU_BOT_WEBHOOK
-FEISHU_APP_ID
-FEISHU_APP_SECRET
 ```
 
-这样仓库里不会暴露机器人地址和飞书应用密钥。
+如果你希望同事本地运行时在线读取飞书配置，就把飞书应用密钥放在本地的 `config/.env`，不要提交到 Git。
 
 ### 手动发版
 
@@ -394,10 +395,10 @@ dist/config/app_config.xlsx
 GitHub Actions 自动打包出来的 Release 包会自带：
 
 ```text
-config/cache/
+config/.env.example
 ```
 
-普通同事一般不需要额外复制缓存。
+普通同事如果要在线刷新飞书配置，需要自己准备 `config/.env`。
 
 如果你自己希望本机或某个内部版本每次运行都能在线读取飞书配置，也可以单独准备：
 
@@ -412,7 +413,7 @@ FEISHU_APP_ID=你的飞书应用ID
 FEISHU_APP_SECRET=你的飞书应用Secret
 ```
 
-注意：`.env` 里是飞书应用密钥，不建议放进 Release 包，也不要提交到 Git。普通同事使用 Release 包里的缓存即可。
+注意：`.env` 里是飞书应用密钥，不建议放进 Release 包，也不要提交到 Git。普通同事如果没有 `.env`，就只能依赖 Release 包里已有的 `config/cache/`。
 
 注意：`app_config.xlsx` 只是“运行哪些国家/店铺”的配置；SKU 成本、物流成本、寄样成本、产品大类来自飞书配置表或本地缓存。  
 如果 exe 目录下没有 `config/.env`，就必须准备：
@@ -485,24 +486,24 @@ data/data_JP/direct_new/
 config/.env
 ```
 
-如果只是给普通同事使用，可以提前准备好 `config/cache/`，让程序使用本地缓存。
+如果只是给普通同事使用，建议提前准备好 `config/.env`，让程序在线读取飞书。
 
 打包后对应路径是：
 
 ```text
-dist/config/cache/
+dist/config/.env
 ```
 
 也就是把源码里的：
 
 ```text
-sum_daily_order/config/cache/
+config/.env
 ```
 
 整个复制到：
 
 ```text
-dist/config/cache/
+dist/config/.env
 ```
 
 ### pip install 最后出现一大段 Traceback
