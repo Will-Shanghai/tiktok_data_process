@@ -145,10 +145,16 @@ python main.py
 
 把 TikTok Shop 导出的订单 CSV 放进对应目录。
 
-日本直邮店示例：
+日本直邮老店示例：
 
 ```text
-sum_daily_order/data/data_JP/direct/
+sum_daily_order/data/data_JP/direct_old/
+```
+
+日本直邮新店示例：
+
+```text
+sum_daily_order/data/data_JP/direct_new/
 ```
 
 越南跨境店示例：
@@ -175,7 +181,15 @@ sum_daily_order/data/data_VN/cross_border/
 config/cache/
 ```
 
-如果需要在线刷新飞书配置，请在 `config/.env` 中配置飞书应用凭证：
+GitHub Actions 自动打包时，会用 GitHub Secrets 临时连接飞书，并把最新配置缓存写入交付包：
+
+```text
+config/cache/
+```
+
+所以普通同事下载 Release 包后，即使电脑网络无法连接飞书，也可以直接使用缓存运行。
+
+如果你自己需要在本机运行时在线刷新飞书配置，请在 `config/.env` 中配置飞书应用凭证：
 
 ```text
 FEISHU_APP_ID=你的飞书应用ID
@@ -184,18 +198,7 @@ FEISHU_APP_SECRET=你的飞书应用Secret
 
 如果没有 `.env`，但 `config/cache/` 中已有对应配置缓存，程序仍可以运行。
 
-`.env` 是密钥文件，不要提交到 Git，不要写进代码，也不要发到公开群。  
-如果是公司内部固定工具包，可以由打包/交付的人把 `.env` 放进交付目录：
-
-```text
-TikTokDailyReport/
-├── TikTokDailyReport_v<版本号>.exe
-└── config/
-    ├── .env
-    └── app_config.xlsx
-```
-
-这样同事双击 exe 时会自动读取，不需要每次手动配置。
+`.env` 是密钥文件，不要提交到 Git，不要写进代码，不要放进公开 Release，也不要发到公开群。Release 包默认只带缓存，不带真实 `.env`。
 
 运行时规则：
 
@@ -250,10 +253,11 @@ VERSION
 2. 在 Windows 环境打包 exe
 3. 自动组装只包含日报工具的交付目录
 4. 自动压缩成 zip 包
-5. 上传到 Actions Artifact
-6. 创建或更新 GitHub Release
-7. 把 zip 包挂到 GitHub Release 的 Assets 附件里
-8. 通过飞书机器人发送成功/失败通知
+5. 使用 GitHub Secrets 临时连接飞书，刷新 `config/cache/`
+6. 上传到 Actions Artifact
+7. 创建或更新 GitHub Release
+8. 把 zip 包挂到 GitHub Release 的 Assets 附件里
+9. 通过飞书机器人发送成功/失败通知
 
 ### Release 下载说明
 
@@ -263,6 +267,7 @@ VERSION
 - GitHub Release 的 `Assets`
 
 交付包里只保留日报工具本身需要的文件，不再附带广告/商品卡/订单分析等旧模块目录。
+交付包会包含打包时从飞书同步的 `config/cache/`，但不会包含真实 `.env` 密钥文件。
 
 建议平时给同事发飞书通知里的 Release 链接。打开 Release 页面后：
 
@@ -279,9 +284,11 @@ VERSION
 
 ```text
 FEISHU_BOT_WEBHOOK
+FEISHU_APP_ID
+FEISHU_APP_SECRET
 ```
 
-这样仓库里不会暴露机器人地址。
+这样仓库里不会暴露机器人地址和飞书应用密钥。
 
 ### 手动发版
 
@@ -384,25 +391,28 @@ dist/config/app_config.xlsx
 
 会自动生成一个默认配置文件。所以 `app_config.xlsx` 不一定必须手动复制，但建议你确认里面的 `enabled` 和店铺目录是否符合实际。
 
-如果同事需要离线使用飞书配置缓存，仍建议把源码里的缓存复制过去：
+GitHub Actions 自动打包出来的 Release 包会自带：
 
 ```text
-sum_daily_order/config/cache/
+config/cache/
 ```
 
-如果你希望同事每次运行都能在线读取飞书配置，也可以把本机的：
+普通同事一般不需要额外复制缓存。
+
+如果你自己希望本机或某个内部版本每次运行都能在线读取飞书配置，也可以单独准备：
 
 ```text
-sum_daily_order/config/.env
+config/.env
 ```
 
-复制到：
+内容格式：
 
 ```text
-dist/config/.env
+FEISHU_APP_ID=你的飞书应用ID
+FEISHU_APP_SECRET=你的飞书应用Secret
 ```
 
-注意：`.env` 里是飞书应用密钥，不建议打进 exe，也不要提交到 Git。把它作为交付包里的外部配置文件即可；同事不需要每次重新填写。
+注意：`.env` 里是飞书应用密钥，不建议放进 Release 包，也不要提交到 Git。普通同事使用 Release 包里的缓存即可。
 
 注意：`app_config.xlsx` 只是“运行哪些国家/店铺”的配置；SKU 成本、物流成本、寄样成本、产品大类来自飞书配置表或本地缓存。  
 如果 exe 目录下没有 `config/.env`，就必须准备：
@@ -460,10 +470,11 @@ dist/TikTokDailyReport_v<版本号>.exe
 
 ### 提示某个目录下未找到文件
 
-确认订单 CSV 放在对应店铺目录。例如日本直邮店：
+确认订单 CSV 放在对应店铺目录。例如日本直邮老店和新店需要分开放：
 
 ```text
-data/data_JP/direct/
+data/data_JP/direct_old/
+data/data_JP/direct_new/
 ```
 
 ### 提示无法从飞书刷新配置

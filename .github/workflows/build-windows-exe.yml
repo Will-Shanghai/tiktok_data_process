@@ -69,6 +69,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
 
+      - name: Prepare Feishu config cache
+        shell: pwsh
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:FEISHU_APP_ID) -or
+              [string]::IsNullOrWhiteSpace($env:FEISHU_APP_SECRET)) {
+            throw "缺少 GitHub Actions Secrets：FEISHU_APP_ID / FEISHU_APP_SECRET，无法打包带飞书凭证和缓存的版本。"
+          }
+
+          New-Item -ItemType Directory -Force -Path "sum_daily_order/config/cache" | Out-Null
+          New-Item -ItemType Directory -Force -Path "sum_daily_order/data" | Out-Null
+          New-Item -ItemType Directory -Force -Path "sum_daily_order/result" | Out-Null
+
+          $envLines = @(
+            "FEISHU_APP_ID=$($env:FEISHU_APP_ID)",
+            "FEISHU_APP_SECRET=$($env:FEISHU_APP_SECRET)"
+          )
+          Set-Content -Path "sum_daily_order/config/.env" -Value $envLines -Encoding utf8
+
+          $env:USE_CONFIG_CACHE_FIRST = "0"
+          python -c "from sum_daily_order.config import cal_cost_return_jp_daily as jp; from sum_daily_order.config import cal_cost_return_vn_daily as vn; [jp.get_config_dataframe(s['sheet_name'], force_refresh=True) for s in jp.JAPAN_STORES if s.get('enabled')]; [vn.get_config_dataframe(s['sheet_name'], force_refresh=True) for s in vn.VIETNAM_STORES if s.get('enabled')]"
+
+          Remove-Item "sum_daily_order/config/.env" -Force
+
       - name: Validate Python files
         shell: pwsh
         run: |
@@ -100,6 +126,7 @@ jobs:
           Copy-Item "TikTokDailyReport_使用说明.txt" "$root/"
           Copy-Item "VERSION" "$root/"
           Copy-Item "sum_daily_order/config/app_config.xlsx" "$root/config/"
+          Copy-Item "sum_daily_order/config/cache/*" "$root/config/cache/" -Force
 
       - name: Create zip package
         id: package
@@ -140,6 +167,7 @@ jobs:
             注意：
             - 不要下载 Source code 压缩包，那个是 GitHub 自动生成的源码包，不是给同事使用的工具包。
             - 如果浏览器提示文件风险，请确认下载的是上面的 Windows 工具 zip 包。
+            - 工具包已内置打包时从飞书同步的配置缓存；出于密钥安全考虑，不内置 `.env`。
 
       - name: Notify Feishu
         if: ${{ always() }}

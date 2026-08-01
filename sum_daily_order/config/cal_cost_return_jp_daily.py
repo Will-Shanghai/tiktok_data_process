@@ -67,7 +67,7 @@ FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 
 # -------- 飞书表格信息 --------
 FEISHU_SHEET_TOKEN = "G3HCsMq7UhSjIptrTI5c0dUnnyh"
-FEISHU_RANGE_SKU = "A:G"                  # SKU配置表的列范围（A到G）
+FEISHU_RANGE_SKU = "A:Z"                  # SKU配置表的列范围，按表头名读取，放宽以兼容新增列
 FEISHU_REQUIRED_SCOPE_HINT = "请在飞书开放平台给应用开通 sheets:spreadsheet:readonly 或 sheets:spreadsheet:read 权限，并重新发布/生效。"
 
 # -------- 日本固定汇率（1 日元兑人民币）--------
@@ -77,6 +77,9 @@ JAPAN_EXCHANGE_RATE = 0.042336
 SKU_ID_COLUMN = "SKU ID"   # 订单 CSV 中的 SKU ID 列名
 PRODUCT_CATEGORY_COLUMN = "产品大类"
 LOGISTICS_CAPACITY_COLUMN = "每单物流承载数量"
+GOODS_TYPE_COLUMN = "货物类型"
+WEIGHT_KG_COLUMN = "重量kg"
+ITEM_QUANTITY_COLUMN = "_ItemQuantity"
 
 # -------- 本地缓存目录 --------
 CACHE_DIR = os.path.join(PROJECT_ROOT, "config", "cache")
@@ -84,6 +87,7 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_EXPIRY_HOURS = 24   # 缓存有效期（小时）
 USE_CONFIG_CACHE_FIRST = os.getenv("USE_CONFIG_CACHE_FIRST", "").lower() in {"1", "true", "yes", "y"}
 SHEET_ID_CACHE = {}
+JP_DIRECT_STORE_KEYS = {"direct_old", "direct_new"}
 
 # -------- 日本店铺配置 --------
 # 如果某个店铺暂时不需要运行，把 enabled 改成 False 即可。
@@ -110,9 +114,18 @@ JAPAN_STORES = [
         "enabled": True,
         "country_code": "jp",
         "country_name": "日本",
-        "store_key": "direct",
-        "store_name": "直邮店",
-        "store_dir": "direct",
+        "store_key": "direct_old",
+        "store_name": "直邮老店",
+        "store_dir": "direct_old",
+        "sheet_name": "日本_直邮店",
+    },
+    {
+        "enabled": True,
+        "country_code": "jp",
+        "country_name": "日本",
+        "store_key": "direct_new",
+        "store_name": "直邮新店",
+        "store_dir": "direct_new",
         "sheet_name": "日本_直邮店",
     },
 ]
@@ -226,6 +239,10 @@ def clean_sku_id_column(df):
 def clean_config_dataframe(df):
     """统一清洗配置表：SKU 转字符串，成本列转数字。"""
     df = clean_sku_id_column(df)
+    if '物流成本(元)' not in df.columns:
+        df['物流成本(元)'] = 0.0
+    if '寄样成本(元)' not in df.columns:
+        df['寄样成本(元)'] = 0.0
     cost_cols = ['产品成本(元)', '物流成本(元)', '寄样成本(元)']
     raw_sample_cost = df['寄样成本(元)'].copy() if '寄样成本(元)' in df.columns else None
 
@@ -244,6 +261,10 @@ def clean_config_dataframe(df):
         df[LOGISTICS_CAPACITY_COLUMN] = 1
     df[LOGISTICS_CAPACITY_COLUMN] = pd.to_numeric(df[LOGISTICS_CAPACITY_COLUMN], errors='coerce').fillna(1)
     df.loc[df[LOGISTICS_CAPACITY_COLUMN] <= 0, LOGISTICS_CAPACITY_COLUMN] = 1
+    if WEIGHT_KG_COLUMN in df.columns:
+        df[WEIGHT_KG_COLUMN] = pd.to_numeric(df[WEIGHT_KG_COLUMN], errors='coerce').fillna(0.0)
+    if GOODS_TYPE_COLUMN in df.columns:
+        df[GOODS_TYPE_COLUMN] = df[GOODS_TYPE_COLUMN].astype(str).str.strip()
 
     if raw_sample_cost is not None:
         formula_mask = raw_sample_cost.astype(str).str.match(r'^=?C\d+\+D\d+$', na=False)
@@ -260,6 +281,28 @@ def clean_config_dataframe(df):
         df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].replace({'': pd.NA, 'nan': pd.NA})
         df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].fillna(df['中文简称'])
     return df
+
+def validate_config_for_store(config_df, store_key, sheet_name):
+    """按店铺类型校验配置表必需字段，避免缺列时静默算错。"""
+    required_cols = ['SKU ID', '中文简称', '产品成本(元)', PRODUCT_CATEGORY_COLUMN]
+    if store_key in JP_DIRECT_STORE_KEYS:
+        required_cols.extend([GOODS_TYPE_COLUMN, WEIGHT_KG_COLUMN])
+    else:
+        required_cols.extend(['物流成本(元)', '寄样成本(元)'])
+    missing = [col for col in required_cols if col not in config_df.columns]
+    if missing:
+        raise ValueError(f"配置表 {sheet_name} 缺少必要列: {', '.join(missing)}")
+
+def get_config_merge_columns(store_key, include_sample_cost=True):
+    """按店铺类型返回订单明细需要合并的配置列。"""
+    cols = ['SKU ID', PRODUCT_CATEGORY_COLUMN, '中文简称', '产品成本(元)']
+    if include_sample_cost:
+        cols.append('寄样成本(元)')
+    if store_key in JP_DIRECT_STORE_KEYS:
+        cols.extend([GOODS_TYPE_COLUMN, WEIGHT_KG_COLUMN])
+    else:
+        cols.extend(['物流成本(元)', LOGISTICS_CAPACITY_COLUMN])
+    return cols
 
 def get_cache_file_path(sheet_name):
     """根据 Sheet 名称生成缓存文件路径"""
@@ -352,6 +395,104 @@ def format_percent(value):
         return ""
     return f"{value:.2%}"
 
+def get_item_quantity(df):
+    """订单明细行数量；没有 Quantity 列时兼容旧文件，默认每行 1 件。"""
+    if "Quantity" not in df.columns:
+        return pd.Series(1, index=df.index, dtype="float64")
+    qty = pd.to_numeric(df["Quantity"], errors="coerce").fillna(1)
+    qty.loc[qty <= 0] = 1
+    return qty
+
+def get_order_key(df):
+    """订单维度 key；缺少 Order ID 时回退为逐行计算。"""
+    if "Order ID" in df.columns:
+        order_key = df["Order ID"].astype(str).str.strip()
+        missing_order = order_key.isna() | order_key.eq("") | order_key.eq("nan")
+        return order_key.mask(missing_order, "ROW_" + df.index.astype(str))
+    return "ROW_" + df.index.astype(str)
+
+def get_jp_direct_freight_rate(goods_type, billable_weight):
+    """日本直邮价卡，返回 per Parcel 和 per Kg，币种 JPY。"""
+    rate_cards = {
+        "普货": [
+            (0.5, 545, 340),
+            (1, 560, 340),
+            (2, 590, 340),
+            (5, 590, 405),
+            (10, 590, 415),
+            (20, 590, 425),
+            (30, 590, 435),
+        ],
+        "特货/敏货": [
+            (0.5, 555, 400),
+            (1, 580, 420),
+            (2, 610, 420),
+            (5, 610, 510),
+            (10, 610, 525),
+            (20, 610, 535),
+            (30, 610, 545),
+        ],
+    }
+    card_key = "普货" if goods_type == "普货" else "特货/敏货"
+    for max_weight, per_parcel, per_kg in rate_cards[card_key]:
+        if billable_weight <= max_weight:
+            return per_parcel, per_kg
+    return rate_cards[card_key][-1][1], rate_cards[card_key][-1][2]
+
+def build_jp_direct_logistics_allocation(df_normal, exchange_rate):
+    """日本直邮：按订单总重量算一次运费，再按重量分摊到产品/SKU。"""
+    result_cols = ["日期", "Product Category", "Mapped Name", "物流成本"]
+    if df_normal.empty:
+        return pd.DataFrame(columns=result_cols)
+
+    df_calc = df_normal.copy()
+    df_calc["_OrderKey"] = get_order_key(df_calc)
+    df_calc[ITEM_QUANTITY_COLUMN] = pd.to_numeric(
+        df_calc.get(ITEM_QUANTITY_COLUMN, 1),
+        errors="coerce",
+    ).fillna(1)
+    df_calc.loc[df_calc[ITEM_QUANTITY_COLUMN] <= 0, ITEM_QUANTITY_COLUMN] = 1
+    df_calc[WEIGHT_KG_COLUMN] = pd.to_numeric(df_calc.get(WEIGHT_KG_COLUMN, 0), errors="coerce").fillna(0)
+    df_calc["_LineWeightKg"] = df_calc[WEIGHT_KG_COLUMN] * df_calc[ITEM_QUANTITY_COLUMN]
+    goods_type = df_calc.get(GOODS_TYPE_COLUMN, "").astype(str).str.strip()
+    df_calc["_IsSpecialGoods"] = goods_type.ne("普货")
+
+    order_summary = df_calc.groupby(["_OrderKey", "日期"]).agg(
+        order_weight_kg=("_LineWeightKg", "sum"),
+        order_qty=(ITEM_QUANTITY_COLUMN, "sum"),
+        has_special=("_IsSpecialGoods", "max"),
+    ).reset_index()
+    order_summary["billable_weight_kg"] = order_summary["order_weight_kg"].map(
+        lambda weight: max(0.05, math.ceil(float(weight) * 1000) / 1000)
+    )
+    order_summary["order_goods_type"] = order_summary["has_special"].map(lambda x: "特货/敏货" if bool(x) else "普货")
+    order_summary[["per_parcel_jpy", "per_kg_jpy"]] = order_summary.apply(
+        lambda row: pd.Series(get_jp_direct_freight_rate(row["order_goods_type"], row["billable_weight_kg"])),
+        axis=1,
+    )
+    order_summary["order_logistics"] = (
+        order_summary["per_parcel_jpy"]
+        + order_summary["billable_weight_kg"] * order_summary["per_kg_jpy"]
+    ) * exchange_rate
+
+    df_calc = df_calc.merge(
+        order_summary[["_OrderKey", "日期", "order_weight_kg", "order_qty", "order_logistics"]],
+        on=["_OrderKey", "日期"],
+        how="left",
+    )
+    df_calc["_WeightShare"] = df_calc.apply(
+        lambda row: (
+            row["_LineWeightKg"] / row["order_weight_kg"]
+            if row["order_weight_kg"] > 0
+            else row[ITEM_QUANTITY_COLUMN] / row["order_qty"]
+            if row["order_qty"] > 0
+            else 0
+        ),
+        axis=1,
+    )
+    df_calc["物流成本"] = df_calc["order_logistics"] * df_calc["_WeightShare"]
+    return df_calc.groupby(["日期", "Product Category", "Mapped Name"])["物流成本"].sum().reset_index()
+
 def build_order_logistics_allocation(df_normal, logistics_col):
     """按订单计算物流成本，并分摊到订单内的产品规格。
 
@@ -365,13 +506,13 @@ def build_order_logistics_allocation(df_normal, logistics_col):
         return pd.DataFrame(columns=result_cols)
 
     df_calc = df_normal.copy()
-    if "Order ID" in df_calc.columns:
-        order_key = df_calc["Order ID"].astype(str).str.strip()
-        missing_order = order_key.isna() | order_key.eq("") | order_key.eq("nan")
-        order_key = order_key.mask(missing_order, "ROW_" + df_calc.index.astype(str))
-    else:
-        order_key = "ROW_" + df_calc.index.astype(str)
-    df_calc["_OrderKey"] = order_key
+    df_calc["_OrderKey"] = get_order_key(df_calc)
+    df_calc[ITEM_QUANTITY_COLUMN] = pd.to_numeric(
+        df_calc.get(ITEM_QUANTITY_COLUMN, 1),
+        errors="coerce",
+    ).fillna(1)
+    df_calc.loc[df_calc[ITEM_QUANTITY_COLUMN] <= 0, ITEM_QUANTITY_COLUMN] = 1
+    df_calc["_LineLogistics"] = pd.to_numeric(df_calc[logistics_col], errors="coerce").fillna(0) * df_calc[ITEM_QUANTITY_COLUMN]
     df_calc[LOGISTICS_CAPACITY_COLUMN] = pd.to_numeric(
         df_calc.get(LOGISTICS_CAPACITY_COLUMN, 1),
         errors="coerce",
@@ -379,8 +520,8 @@ def build_order_logistics_allocation(df_normal, logistics_col):
     df_calc.loc[df_calc[LOGISTICS_CAPACITY_COLUMN] <= 0, LOGISTICS_CAPACITY_COLUMN] = 1
 
     category_order = df_calc.groupby(["_OrderKey", "日期", "Product Category"]).agg(
-        category_qty=("SKU_ID", "count"),
-        original_logistics=(logistics_col, "sum"),
+        category_qty=(ITEM_QUANTITY_COLUMN, "sum"),
+        original_logistics=("_LineLogistics", "sum"),
         unit_logistics=(logistics_col, "max"),
         capacity=(LOGISTICS_CAPACITY_COLUMN, "max"),
     ).reset_index()
@@ -397,8 +538,8 @@ def build_order_logistics_allocation(df_normal, logistics_col):
     )
 
     sku_order = df_calc.groupby(["_OrderKey", "日期", "Product Category", "Mapped Name"]).agg(
-        sku_qty=("SKU_ID", "count"),
-        sku_original_logistics=(logistics_col, "sum"),
+        sku_qty=(ITEM_QUANTITY_COLUMN, "sum"),
+        sku_original_logistics=("_LineLogistics", "sum"),
     ).reset_index()
     sku_order = sku_order.merge(
         category_order[["_OrderKey", "日期", "Product Category", "category_qty", "original_logistics", "category_logistics"]],
@@ -674,6 +815,7 @@ def run_report(combo, config_df, exchange_rate):
     # 配置表中的列名（统一）
     logistics_col = "物流成本(元)"
     sample_cost_col = "寄样成本(元)"
+    validate_config_for_store(config_df, store_key, combo.get("sheet_name", display_name))
 
     folder_path = os.path.normpath(os.path.join(PROJECT_ROOT, 'data', f'data_{country_code.upper()}', store_dir))
     output_filename = os.path.normpath(
@@ -725,10 +867,11 @@ def run_report(combo, config_df, exchange_rate):
             print(f"⚠️ 文件 {file_name} 中未找到 SKU ID 列 '{SKU_ID_COLUMN}'，将跳过此文件")
             continue
         df_normal['SKU_ID'] = clean_sku_str(df_normal[SKU_ID_COLUMN])
+        df_normal[ITEM_QUANTITY_COLUMN] = get_item_quantity(df_normal)
 
         # 左连接配置表
         df_normal = df_normal.merge(
-            config_df[['SKU ID', PRODUCT_CATEGORY_COLUMN, '中文简称', '产品成本(元)', logistics_col, sample_cost_col, LOGISTICS_CAPACITY_COLUMN]],
+            config_df[get_config_merge_columns(store_key, include_sample_cost=True)],
             left_on='SKU_ID',
             right_on='SKU ID',
             how='left'
@@ -750,17 +893,6 @@ def run_report(combo, config_df, exchange_rate):
                 .to_dict('records')
             )
 
-        norm_agg = df_normal.groupby('Mapped Name').agg({
-            n_col: 'sum',
-            p_col: 'sum',
-            r_col: 'sum',
-            '产品成本(元)': 'first',
-            logistics_col: 'first',
-            sample_cost_col: 'first',
-            'SKU_ID': 'count'
-        }).reset_index()
-        norm_agg.rename(columns={'SKU_ID': '销量'}, inplace=True)
-
         # -------- 样品订单 --------
         df_sample = df[
             ~df[status_col].isin(cancel_keywords) & (df[quantity_col].isna() | (df[quantity_col] == ''))
@@ -775,8 +907,9 @@ def run_report(combo, config_df, exchange_rate):
 
         if not df_sample.empty:
             df_sample['SKU_ID'] = clean_sku_str(df_sample[SKU_ID_COLUMN])
+            df_sample[ITEM_QUANTITY_COLUMN] = get_item_quantity(df_sample)
             df_sample = df_sample.merge(
-                config_df[['SKU ID', PRODUCT_CATEGORY_COLUMN, '中文简称', sample_cost_col]],
+                config_df[get_config_merge_columns(store_key, include_sample_cost=True)],
                 left_on='SKU_ID',
                 right_on='SKU ID',
                 how='left'
@@ -794,9 +927,9 @@ def run_report(combo, config_df, exchange_rate):
             p_col: 'sum',
             r_col: 'sum',
             '产品成本(元)': 'first',
-            'SKU_ID': 'count'
+            ITEM_QUANTITY_COLUMN: 'sum'
         }).reset_index()
-        normal_daily_product.rename(columns={'SKU_ID': '销量'}, inplace=True)
+        normal_daily_product.rename(columns={ITEM_QUANTITY_COLUMN: '销量'}, inplace=True)
         if 'Order ID' in df_normal.columns:
             sku_daily_order_count = (
                 df_normal[['日期', 'Product Category', 'Mapped Name', 'Order ID']]
@@ -817,7 +950,10 @@ def run_report(combo, config_df, exchange_rate):
             normal_daily_product[n_col] + normal_daily_product[p_col] + normal_daily_product[r_col]
         )
         normal_daily_product['产品成本'] = normal_daily_product['销量'] * normal_daily_product['产品成本(元)']
-        logistics_daily_product = build_order_logistics_allocation(df_normal, logistics_col)
+        if store_key in JP_DIRECT_STORE_KEYS:
+            logistics_daily_product = build_jp_direct_logistics_allocation(df_normal, exchange_rate)
+        else:
+            logistics_daily_product = build_order_logistics_allocation(df_normal, logistics_col)
         normal_daily_product = normal_daily_product.merge(
             logistics_daily_product,
             on=['日期', 'Product Category', 'Mapped Name'],
@@ -829,10 +965,24 @@ def run_report(combo, config_df, exchange_rate):
         if not df_sample.empty:
             sample_daily_product = df_sample.groupby(['日期', 'Product Category', 'Mapped Name']).agg({
                 sample_cost_col: 'first',
-                'SKU_ID': 'count'
+                '产品成本(元)': 'first',
+                ITEM_QUANTITY_COLUMN: 'sum'
             }).reset_index()
-            sample_daily_product.rename(columns={'SKU_ID': '寄样数'}, inplace=True)
-            sample_daily_product['寄样支出'] = sample_daily_product['寄样数'] * sample_daily_product[sample_cost_col]
+            sample_daily_product.rename(columns={ITEM_QUANTITY_COLUMN: '寄样数'}, inplace=True)
+            if store_key in JP_DIRECT_STORE_KEYS:
+                sample_logistics = build_jp_direct_logistics_allocation(df_sample, exchange_rate)
+                sample_daily_product = sample_daily_product.merge(
+                    sample_logistics.rename(columns={'物流成本': '寄样物流成本'}),
+                    on=['日期', 'Product Category', 'Mapped Name'],
+                    how='left'
+                )
+                sample_daily_product['寄样物流成本'] = sample_daily_product['寄样物流成本'].fillna(0)
+                sample_daily_product['寄样支出'] = (
+                    sample_daily_product['寄样数'] * sample_daily_product['产品成本(元)']
+                    + sample_daily_product['寄样物流成本']
+                )
+            else:
+                sample_daily_product['寄样支出'] = sample_daily_product['寄样数'] * sample_daily_product[sample_cost_col]
             sample_daily_product = sample_daily_product[['日期', 'Product Category', 'Mapped Name', '寄样数', '寄样支出']]
 
         merged_daily_product = normal_daily_product[[
