@@ -649,6 +649,29 @@ def build_daily_product_quantity_matrix(df_daily_product):
     matrix.loc["汇总"] = matrix.sum(axis=0)
     return matrix.reset_index()
 
+def build_daily_sku_quantity_matrix(df_sku_detail):
+    """按日期横向展开每个 SKU 的销量，用于 SKU 明细趋势查看。"""
+    if df_sku_detail.empty:
+        return pd.DataFrame([["无每日 SKU 销量数据"]], columns=["提示"])
+
+    matrix = df_sku_detail.pivot_table(
+        index=["产品大类", "产品名称"],
+        columns="日期",
+        values="销量",
+        aggfunc="sum",
+        fill_value=0,
+    ).astype(int)
+    sorted_cols = sorted(matrix.columns, key=lambda x: pd.to_datetime(x, errors="coerce"))
+    matrix = matrix[sorted_cols]
+    matrix["汇总"] = matrix.sum(axis=1)
+    total_row = matrix.sum(axis=0).to_frame().T
+    total_row.index = pd.MultiIndex.from_tuples(
+        [("汇总", "汇总")],
+        names=matrix.index.names,
+    )
+    matrix = pd.concat([matrix, total_row]).reset_index()
+    return matrix.rename(columns={"产品名称": "产品SKU"})
+
 
 def collect_order_sku_preview(store_config, max_rows=80):
     """配置表为空时，输出订单里出现过的 SKU，方便补配置。"""
@@ -994,6 +1017,7 @@ def run_report(store_config, config_df, exchange_rate):
     df_product_profit_by_period = build_product_profit_by_period(df_daily_product)
     df_product_quantity_by_period = build_product_quantity_by_period(product_quantity_records)
     df_daily_product_quantity_matrix = build_daily_product_quantity_matrix(df_daily_product)
+    df_daily_sku_quantity_matrix = build_daily_sku_quantity_matrix(df_sku_detail)
 
     df_quantity_records = pd.DataFrame(product_quantity_records)
     if not df_quantity_records.empty:
@@ -1044,9 +1068,8 @@ def run_report(store_config, config_df, exchange_rate):
             center_excel_sheet(writer, detail_sheet, len(df_daily_product_quantity_matrix) + 1, len(df_daily_product_quantity_matrix.columns))
 
             sku_detail_sheet = "SKU明细"
-            df_sku_detail_display = insert_blank_rows_between_files(df_sku_detail)
-            df_sku_detail_display.to_excel(writer, sheet_name=sku_detail_sheet, index=False)
-            center_excel_sheet(writer, sku_detail_sheet, len(df_sku_detail_display) + 1, len(df_sku_detail_display.columns))
+            df_daily_sku_quantity_matrix.to_excel(writer, sheet_name=sku_detail_sheet, index=False)
+            center_excel_sheet(writer, sku_detail_sheet, len(df_daily_sku_quantity_matrix) + 1, len(df_daily_sku_quantity_matrix.columns))
 
             quantity_sheet = "产品销量矩阵"
             df_product_quantity_by_period.to_excel(writer, sheet_name=quantity_sheet, index=True)
