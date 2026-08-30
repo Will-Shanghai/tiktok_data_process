@@ -11,7 +11,7 @@ TikTok 日本按日汇总订单成本报表脚本
 【使用前必读】
 1. 创建飞书应用并开启权限：sheet:client.doc.read（读取表格）
 2. 将应用加入配置表的协作者（至少只读权限）
-3. 配置 .env 文件中的 FEISHU_APP_ID 和 FEISHU_APP_SECRET
+3. 配置 .env 文件中的 FEISHU_APP_ID / FEISHU_APP_SECRET 和 FEISHU_SHEET_TOKEN_SEA
 4. 确认订单 CSV 中的 SKU ID 列名，并修改下方 SKU_ID_COLUMN 变量
 5. 在飞书表格中创建以下 Sheet：
    - "日本_本土店", "日本_跨境店", "日本_直邮店"（SKU配置）
@@ -66,12 +66,12 @@ FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 
 # -------- 飞书表格信息 --------
-FEISHU_SHEET_TOKEN = "G3HCsMq7UhSjIptrTI5c0dUnnyh"
+FEISHU_SHEET_TOKEN = os.getenv("FEISHU_SHEET_TOKEN_SEA") or os.getenv("FEISHU_SHEET_TOKEN") or ""
 FEISHU_RANGE_SKU = "A:Z"                  # SKU配置表的列范围，按表头名读取，放宽以兼容新增列
 FEISHU_REQUIRED_SCOPE_HINT = "请在飞书开放平台给应用开通 sheets:spreadsheet:readonly 或 sheets:spreadsheet:read 权限，并重新发布/生效。"
 
 # -------- 日本固定汇率（1 日元兑人民币）--------
-JAPAN_EXCHANGE_RATE = 0.042336
+JAPAN_EXCHANGE_RATE = float(os.getenv("JAPAN_EXCHANGE_RATE", "0.042336"))
 
 # -------- 订单 CSV 中 SKU ID 列名（请根据实际调整）--------
 SKU_ID_COLUMN = "SKU ID"   # 订单 CSV 中的 SKU ID 列名
@@ -133,6 +133,16 @@ JAPAN_STORES = [
 # ============================================================
 # 1. 飞书表格读取 + 缓存工具
 # ============================================================
+
+def normalize_feishu_sheet_token(value):
+    if not value:
+        return ""
+    token = str(value).strip().strip("'").strip('"').strip()
+    for sep in ("?", "#", "&"):
+        if sep in token:
+            token = token.split(sep, 1)[0]
+    return token
+
 
 def get_feishu_token(app_id, app_secret):
     """获取飞书 tenant_access_token"""
@@ -330,9 +340,9 @@ def get_config_dataframe(sheet_name, force_refresh=False):
             print(f"   ⚠️ 缓存读取失败: {e}，尝试刷新")
 
     try:
-        if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
+        if not FEISHU_APP_ID or not FEISHU_APP_SECRET or not FEISHU_SHEET_TOKEN:
             raise EnvironmentError(
-                "未配置 FEISHU_APP_ID/FEISHU_APP_SECRET，无法从飞书刷新配置。"
+                "未配置 FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_SHEET_TOKEN_SEA，无法从飞书刷新配置。"
             )
         token = get_feishu_token(FEISHU_APP_ID, FEISHU_APP_SECRET)
         df = read_feishu_sheet(token, FEISHU_SHEET_TOKEN, sheet_name, FEISHU_RANGE_SKU)
@@ -1164,6 +1174,9 @@ def run_report(combo, config_df, exchange_rate):
     # Sheet4: 样品统计
     df_sample_records = pd.DataFrame(sample_quantity_records)
     if not df_sample_records.empty:
+        df_sample_summary = df_sample_records.groupby(['文件名', '产品名称'])['寄样数'].sum().reset_index()
+        df_sample_summary = df_sample_summary.rename(columns={'寄样数': '汇总'})
+
         df_sample_matrix = df_sample_records.pivot_table(
             index=['文件名', '产品名称'],
             columns='日期',
@@ -1172,13 +1185,10 @@ def run_report(combo, config_df, exchange_rate):
             fill_value=0
         ).astype(int)
         sorted_cols = sorted(df_sample_matrix.columns, key=lambda x: pd.to_datetime(x))
-        df_sample_matrix = df_sample_matrix[sorted_cols]
-        df_sample_matrix['汇总'] = df_sample_matrix.sum(axis=1)
-        total_row = df_sample_matrix.sum(axis=0).to_frame().T
-        total_row.index = pd.MultiIndex.from_tuples([('全部文件合计', '汇总')], names=df_sample_matrix.index.names)
-        df_sample_matrix = pd.concat([df_sample_matrix, total_row]).reset_index()
+        df_sample_matrix = df_sample_matrix[sorted_cols].reset_index()
     else:
-        df_sample_matrix = pd.DataFrame([["无样品数据"]], columns=["提示"])
+        df_sample_summary = pd.DataFrame([['无样品数据']], columns=['提示'])
+        df_sample_matrix = pd.DataFrame([['无样品数据']], columns=['提示'])
 
     # 保存
     try:
@@ -1207,9 +1217,18 @@ def run_report(combo, config_df, exchange_rate):
             quantity_cols = max(len(df_product_quantity_by_period.columns) + 1, len(df_quantity_matrix_display.columns))
             center_excel_sheet(writer, quantity_sheet, quantity_rows, quantity_cols)
 
-            df_sample_matrix_display = insert_blank_rows_between_files(df_sample_matrix)
-            df_sample_matrix_display.to_excel(writer, sheet_name='样品统计', index=False)
-            center_excel_sheet(writer, '样品统计', len(df_sample_matrix_display) + 1, len(df_sample_matrix_display.columns))
+            sample_sheet = '样品统计'
+            if 'df_sample_summary' in locals() and '提示' not in df_sample_summary.columns:
+                df_sample_summary_display = insert_blank_rows_between_files(df_sample_summary)
+                df_sample_summary_display.to_excel(writer, sheet_name=sample_sheet, index=False)
+                startrow = len(df_sample_summary_display) + 3
+                df_sample_matrix.to_excel(writer, sheet_name=sample_sheet, startrow=startrow, index=False)
+                total_rows = startrow + len(df_sample_matrix) + 1
+                total_cols = max(len(df_sample_summary_display.columns), len(df_sample_matrix.columns))
+                center_excel_sheet(writer, sample_sheet, total_rows, total_cols)
+            else:
+                df_sample_matrix.to_excel(writer, sheet_name=sample_sheet, index=False)
+                center_excel_sheet(writer, sample_sheet, len(df_sample_matrix) + 1, len(df_sample_matrix.columns))
 
             if period_comparison_frames:
                 startrow = 0

@@ -4,6 +4,7 @@
 
 - 日本站日报：`sum_daily_order/config/cal_cost_return_jp_daily.py`
 - 越南站日报：`sum_daily_order/config/cal_cost_return_vn_daily.py`
+- 墨西哥站日报：`sum_daily_order/config/cal_cost_return_mx_daily.py`
 - 打包友好的统一入口：`main.py`
 
 ## 成本与利润口径说明
@@ -16,12 +17,14 @@
 - 产品成本
 - 物流成本
 - 寄样成本 / 寄样支出
+- 每件商品成交费用（墨西哥直邮）
 
 成本计算口径：
 
 - 产品成本：按销量计算，即 `销量 × 产品成本(元)`。
 - 物流成本：按订单计算，不再简单按销量重复计算。同一订单内会先根据配置表 `每单物流承载数量` 计算各产品大类的候选物流成本，然后整单只计一次物流成本；混合产品订单会按候选物流成本比例分摊到产品大类。
 - 寄样成本：按样品单数量计算，即 `寄样数 × 寄样成本(元)`。
+- 每件商品成交费用：仅墨西哥直邮使用，按成交件数计算，即 `销量 × 6 MXN × 墨西哥汇率`。这里的“件数”不是订单数，一单买 2 件就计 2 次，一单买 3 件就计 3 次。
 
 当前程序没有扣除：
 
@@ -53,6 +56,8 @@ sum_daily_order/
 │   └── data_VN/
 │       ├── local/
 │       └── cross_border/
+│   └── data_MX/
+│       └── direct_old/
 └── result/                      # 报表输出目录
 ```
 
@@ -74,6 +79,8 @@ TikTokDailyReport/
 │   └── data_VN/
 │       ├── local/
 │       └── cross_border/
+│   └── data_MX/
+│       └── direct_old/
 └── result/
 ```
 
@@ -104,6 +111,24 @@ sheet_name    飞书配置表 Sheet 名称
 ```
 
 如果暂时不跑某个店铺，把 `enabled` 改成 `0` 即可。
+
+墨西哥直邮脚本当前只接入直邮店，建议把对应行放在：
+
+```text
+data/data_MX/direct_old/
+```
+
+飞书配置表建议使用这些列：
+
+```text
+产品大类 | SKU ID | SKU中文简称 | 产品成本(元) | 计费重量kg
+```
+
+其中 `计费重量kg` 由你在飞书里直接维护，脚本不再自行比较实重和体积重。
+
+墨西哥直邮在利润里还会单独加一项：
+
+- `每件商品成交费用`：固定按 `6 MXN/件` 计算，再按墨西哥汇率换算成人民币
 
 ## 本地运行
 
@@ -196,6 +221,26 @@ config/cache/
 ```text
 FEISHU_APP_ID=你的飞书应用ID
 FEISHU_APP_SECRET=你的飞书应用Secret
+```
+
+日本和越南共用这一组飞书表格 Token：
+
+```text
+FEISHU_SHEET_TOKEN_SEA=你的日本/越南飞书表格Token
+```
+
+墨西哥和美国共用这一组飞书表格 Token：
+
+```text
+FEISHU_SHEET_TOKEN_AMERICAS=你的墨西哥/美国飞书表格Token
+```
+
+各站汇率也建议放在 `.env` 里：
+
+```text
+JAPAN_EXCHANGE_RATE=0.042336
+VIETNAM_EXCHANGE_RATE=0.0002575
+MEXICO_EXCHANGE_RATE=0.000000
 ```
 
 如果没有 `.env`，但 `config/cache/` 中已有对应配置缓存，程序仍可以运行。
@@ -411,6 +456,11 @@ config/.env
 ```text
 FEISHU_APP_ID=你的飞书应用ID
 FEISHU_APP_SECRET=你的飞书应用Secret
+FEISHU_SHEET_TOKEN_SEA=你的日本/越南飞书表格Token
+FEISHU_SHEET_TOKEN_AMERICAS=你的墨西哥/美国飞书表格Token
+JAPAN_EXCHANGE_RATE=0.042336
+VIETNAM_EXCHANGE_RATE=0.0002575
+MEXICO_EXCHANGE_RATE=0.000000
 ```
 
 注意：`.env` 里是飞书应用密钥，不建议放进 Release 包，也不要提交到 Git。普通同事如果没有 `.env`，就只能依赖 Release 包里已有的 `config/cache/`。

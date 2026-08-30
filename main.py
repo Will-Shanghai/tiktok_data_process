@@ -3,7 +3,7 @@
 TikTok Shop daily report launcher.
 
 This is the packaging-friendly entry point for Windows/macOS users. It reads
-config/app_config.xlsx, then runs the enabled JP/VN daily report jobs.
+config/app_config.xlsx, then runs the enabled JP/VN/MX daily report jobs.
 """
 
 import argparse
@@ -95,24 +95,14 @@ DEFAULT_STORES = [
         "说明": "越南跨境目录名为 cross_border",
     },
     {
-        "enabled": 0,
-        "country_code": "MX",
-        "country_name": "墨西哥",
-        "store_key": "local",
-        "store_name": "本土店",
-        "store_dir": "local",
-        "sheet_name": "墨西哥_本土店",
-        "说明": "目录已预留；墨西哥日报脚本接入后再启用",
-    },
-    {
-        "enabled": 0,
+        "enabled": 1,
         "country_code": "MX",
         "country_name": "墨西哥",
         "store_key": "direct_old",
         "store_name": "直邮店",
         "store_dir": "direct_old",
         "sheet_name": "墨西哥_直邮店",
-        "说明": "目录已预留；墨西哥日报脚本接入后再启用",
+        "说明": "墨西哥当前仅接入直邮脚本",
     },
 ]
 
@@ -231,7 +221,7 @@ def choose_site():
     print("\n请选择要运行的站点：")
     print("1. 日本 JP")
     print("2. 越南 VN")
-    print("3. 墨西哥 MX（目录已预留，日报脚本接入后使用）")
+    print("3. 墨西哥 MX")
     print("4. 全部 all")
     choice = input("请输入数字后回车: ").strip()
     return {"1": "JP", "2": "VN", "3": "MX", "4": "all"}.get(choice, "")
@@ -273,7 +263,7 @@ def check_config_sources(stores):
         f"缺少缓存的 Sheet:\n{missing_text}\n\n"
         "解决办法二选一：\n"
         "1. 把源码里的 sum_daily_order/config/cache 文件夹复制到 exe 同级的 config/cache；\n"
-        "2. 在 exe 同级的 config/.env 中配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET。"
+        "2. 在 exe 同级的 config/.env 中配置对应国家的飞书 App ID / App Secret。"
     )
 
 
@@ -290,14 +280,14 @@ def run(site):
     grouped = split_stores_by_site(stores)
 
     if site == "all":
-        selected_sites = ["JP", "VN"]
+        selected_sites = ["JP", "VN", "MX"]
     else:
         selected_sites = [normalize_country_code(site)]
 
     enabled_stores = [
         store
         for site_code in selected_sites
-        if site_code in {"JP", "VN"}
+        if site_code in {"JP", "VN", "MX"}
         for store in grouped.get(site_code, [])
     ]
     check_config_sources(enabled_stores)
@@ -319,7 +309,13 @@ def run(site):
             print("⚠️ app_config.xlsx 中没有启用的越南店铺，已跳过。")
 
     if "MX" in selected_sites:
-        print("⚠️ 墨西哥目录和配置已预留，但墨西哥日报脚本尚未接入，暂不运行。")
+        mx_stores = [store for store in grouped["MX"] if store.get("store_key") == "direct_old"]
+        if mx_stores:
+            from sum_daily_order.config.cal_cost_return_mx_daily import run_mexico_daily
+
+            run_mexico_daily(mx_stores)
+        else:
+            print("⚠️ app_config.xlsx 中没有启用的墨西哥直邮店铺，已跳过。")
 
 
 def main():

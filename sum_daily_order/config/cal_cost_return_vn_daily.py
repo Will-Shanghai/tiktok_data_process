@@ -56,12 +56,12 @@ load_dotenv()
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 
-FEISHU_SHEET_TOKEN = "G3HCsMq7UhSjIptrTI5c0dUnnyh"
+FEISHU_SHEET_TOKEN = os.getenv("FEISHU_SHEET_TOKEN_SEA") or os.getenv("FEISHU_SHEET_TOKEN") or ""
 FEISHU_RANGE_SKU = "A:G"
 FEISHU_REQUIRED_SCOPE_HINT = "请在飞书开放平台给应用开通 sheets:spreadsheet:readonly 或 sheets:spreadsheet:read 权限，并重新发布/生效。"
 
 # -------- 越南固定汇率（1 越南盾兑人民币）--------
-VIETNAM_EXCHANGE_RATE = 1 / 3883
+VIETNAM_EXCHANGE_RATE = float(os.getenv("VIETNAM_EXCHANGE_RATE", str(1 / 3883)))
 
 SKU_ID_COLUMN = "SKU ID"
 PRODUCT_CATEGORY_COLUMN = "产品大类"
@@ -98,6 +98,16 @@ VIETNAM_STORES = [
 # ============================================================
 # 1. 飞书表格读取 + 缓存工具
 # ============================================================
+def normalize_feishu_sheet_token(value):
+    if not value:
+        return ""
+    token = str(value).strip().strip("'").strip('"').strip()
+    for sep in ("?", "#", "&"):
+        if sep in token:
+            token = token.split(sep, 1)[0]
+    return token
+
+
 def get_feishu_token(app_id, app_secret):
     """获取飞书 tenant_access_token。"""
     url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
@@ -265,7 +275,7 @@ def get_config_dataframe(sheet_name, force_refresh=False):
     try:
         if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
             raise EnvironmentError(
-                "未配置 FEISHU_APP_ID/FEISHU_APP_SECRET，无法从飞书刷新配置。"
+                "未配置 FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_SHEET_TOKEN_SEA，无法从飞书刷新配置。"
             )
         token = get_feishu_token(FEISHU_APP_ID, FEISHU_APP_SECRET)
         df = read_feishu_sheet(token, FEISHU_SHEET_TOKEN, sheet_name, FEISHU_RANGE_SKU)
@@ -1039,6 +1049,9 @@ def run_report(store_config, config_df, exchange_rate):
 
     df_sample_records = pd.DataFrame(sample_quantity_records)
     if not df_sample_records.empty:
+        df_sample_summary = df_sample_records.groupby(["文件名", "产品名称"])["寄样数"].sum().reset_index()
+        df_sample_summary = df_sample_summary.rename(columns={"寄样数": "汇总"})
+
         df_sample_matrix = df_sample_records.pivot_table(
             index=["文件名", "产品名称"],
             columns="日期",
@@ -1047,12 +1060,9 @@ def run_report(store_config, config_df, exchange_rate):
             fill_value=0,
         ).astype(int)
         sorted_cols = sorted(df_sample_matrix.columns, key=lambda x: pd.to_datetime(x, errors="coerce"))
-        df_sample_matrix = df_sample_matrix[sorted_cols]
-        df_sample_matrix["汇总"] = df_sample_matrix.sum(axis=1)
-        total_row = df_sample_matrix.sum(axis=0).to_frame().T
-        total_row.index = pd.MultiIndex.from_tuples([("全部文件合计", "汇总")], names=df_sample_matrix.index.names)
-        df_sample_matrix = pd.concat([df_sample_matrix, total_row]).reset_index()
+        df_sample_matrix = df_sample_matrix[sorted_cols].reset_index()
     else:
+        df_sample_summary = pd.DataFrame([["无样品数据"]], columns=["提示"])
         df_sample_matrix = pd.DataFrame([["无样品数据"]], columns=["提示"])
 
     try:
@@ -1080,9 +1090,18 @@ def run_report(store_config, config_df, exchange_rate):
             quantity_cols = max(len(df_product_quantity_by_period.columns) + 1, len(df_quantity_matrix_display.columns))
             center_excel_sheet(writer, quantity_sheet, quantity_rows, quantity_cols)
 
-            df_sample_matrix_display = insert_blank_rows_between_files(df_sample_matrix)
-            df_sample_matrix_display.to_excel(writer, sheet_name="样品统计", index=False)
-            center_excel_sheet(writer, "样品统计", len(df_sample_matrix_display) + 1, len(df_sample_matrix_display.columns))
+            sample_sheet = "样品统计"
+            if 'df_sample_summary' in locals() and '提示' not in df_sample_summary.columns:
+                df_sample_summary_display = insert_blank_rows_between_files(df_sample_summary)
+                df_sample_summary_display.to_excel(writer, sheet_name=sample_sheet, index=False)
+                startrow = len(df_sample_summary_display) + 3
+                df_sample_matrix.to_excel(writer, sheet_name=sample_sheet, startrow=startrow, index=False)
+                total_rows = startrow + len(df_sample_matrix) + 1
+                total_cols = max(len(df_sample_summary_display.columns), len(df_sample_matrix.columns))
+                center_excel_sheet(writer, sample_sheet, total_rows, total_cols)
+            else:
+                df_sample_matrix.to_excel(writer, sheet_name=sample_sheet, index=False)
+                center_excel_sheet(writer, sample_sheet, len(df_sample_matrix) + 1, len(df_sample_matrix.columns))
 
             if period_comparison_frames:
                 startrow = 0
