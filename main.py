@@ -99,10 +99,20 @@ DEFAULT_STORES = [
         "country_code": "MX",
         "country_name": "墨西哥",
         "store_key": "direct_old",
-        "store_name": "直邮店",
+        "store_name": "直邮老店",
         "store_dir": "direct_old",
         "sheet_name": "墨西哥_直邮店",
-        "说明": "墨西哥当前仅接入直邮脚本",
+        "说明": "墨西哥直邮老店订单 CSV 放 data/data_MX/direct_old",
+    },
+    {
+        "enabled": 1,
+        "country_code": "MX",
+        "country_name": "墨西哥",
+        "store_key": "direct_new",
+        "store_name": "直邮新店",
+        "store_dir": "direct_new",
+        "sheet_name": "墨西哥_直邮店",
+        "说明": "墨西哥直邮新店订单 CSV 放 data/data_MX/direct_new",
     },
 ]
 
@@ -139,6 +149,7 @@ def ensure_runtime_dirs():
         "data/data_VN/cross_border",
         "data/data_MX/local",
         "data/data_MX/direct_old",
+        "data/data_MX/direct_new",
         "config/cache",
     ]:
         (APP_ROOT / folder).mkdir(parents=True, exist_ok=True)
@@ -310,7 +321,7 @@ def run(site):
             print("⚠️ app_config.xlsx 中没有启用的越南店铺，已跳过。")
 
     if "MX" in selected_sites:
-        mx_stores = [store for store in grouped["MX"] if store.get("store_key") == "direct_old"]
+        mx_stores = grouped["MX"]
         if mx_stores:
             from sum_daily_order.config.cal_cost_return_mx_daily import run_mexico_daily
 

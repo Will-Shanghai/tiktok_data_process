@@ -100,8 +100,17 @@ MEXICO_STORES = [
         "country_code": "MX",
         "country_name": "墨西哥",
         "store_key": "direct_old",
-        "store_name": "直邮店",
+        "store_name": "直邮老店",
         "store_dir": "direct_old",
+        "sheet_name": "墨西哥_直邮店",
+    },
+    {
+        "enabled": True,
+        "country_code": "MX",
+        "country_name": "墨西哥",
+        "store_key": "direct_new",
+        "store_name": "直邮新店",
+        "store_dir": "direct_new",
         "sheet_name": "墨西哥_直邮店",
     }
 ]
@@ -948,22 +957,22 @@ def run_report(store_config, config_df, exchange_rate):
         )
         normal_daily_product["物流成本"] = normal_daily_product["物流成本"].fillna(0)
 
-        sample_daily_product = pd.DataFrame(columns=["日期", "Product Category", "Mapped Name", "寄样数", "销售额", "寄样支出", "寄样IVA", "寄样总成本"])
+        sample_daily_product = pd.DataFrame(columns=["日期", "Product Category", "Mapped Name", "寄样数", "寄样销售额", "寄样支出", "寄样IVA", "寄样总成本", "寄样除运费外销售额"])
         if not df_sample.empty:
             for col in [n_col, p_col, r_col]:
                 df_sample[col] = df_sample[col].map(parse_amount)
-            df_sample[p_display_col] = df_sample[n_col] + df_sample[p_col]
+            df_sample["寄样除运费外销售额"] = df_sample[n_col] + df_sample[p_col]
             sample_daily_product = df_sample.groupby(["日期", "Product Category", "Mapped Name"]).agg({
                 n_col: "sum",
                 p_col: "sum",
-                p_display_col: "sum",
+                "寄样除运费外销售额": "sum",
                 r_col: "sum",
                 "产品成本(元)": "first",
                 WEIGHT_KG_COLUMN: "first",
                 ITEM_QUANTITY_COLUMN: "sum",
             }).reset_index()
             sample_daily_product.rename(columns={ITEM_QUANTITY_COLUMN: "寄样数"}, inplace=True)
-            sample_daily_product["销售额"] = sample_daily_product[n_col] + sample_daily_product[p_col] + sample_daily_product[r_col]
+            sample_daily_product["寄样销售额"] = sample_daily_product[n_col] + sample_daily_product[p_col] + sample_daily_product[r_col]
             sample_logistics = build_mexico_direct_logistics_allocation(df_sample, exchange_rate)
             sample_daily_product = sample_daily_product.merge(
                 sample_logistics.rename(columns={"物流成本": "寄样物流成本"}),
@@ -981,12 +990,10 @@ def run_report(store_config, config_df, exchange_rate):
                 * MX_IVA_RATE
             ).round(2)
             sample_daily_product["寄样总成本"] = sample_daily_product["寄样支出"]
-            sample_daily_product = sample_daily_product[["日期", "Product Category", "Mapped Name", "寄样数", "销售额", "寄样支出", "寄样IVA", "寄样总成本", p_display_col]]
-
-        sample_daily_product = sample_daily_product.rename(columns={"销售额": "寄样销售额"}) if not sample_daily_product.empty else sample_daily_product
+            sample_daily_product = sample_daily_product[["日期", "Product Category", "Mapped Name", "寄样数", "寄样销售额", "寄样支出", "寄样IVA", "寄样总成本", "寄样除运费外销售额"]]
 
         merged_daily_product = normal_daily_product[[
-            "日期", "Product Category", "Mapped Name", "销量", "销售额", p_display_col, "产品成本", "物流成本", "正常订单IVA"
+            "日期", "Product Category", "Mapped Name", "销量", "销售额", p_col, p_display_col, "产品成本", "物流成本", "正常订单IVA"
         ]].merge(
             sample_daily_product,
             on=["日期", "Product Category", "Mapped Name"],
@@ -994,7 +1001,9 @@ def run_report(store_config, config_df, exchange_rate):
         )
         if "寄样销售额" in merged_daily_product.columns:
             merged_daily_product["销售额"] = merged_daily_product["销售额"].fillna(0) + merged_daily_product["寄样销售额"].fillna(0)
-        for col in ["销量", "销售额", p_display_col, "产品成本", "物流成本", "正常订单IVA", "寄样数", "寄样支出", "寄样IVA", "寄样总成本"]:
+        if "寄样除运费外销售额" in merged_daily_product.columns:
+            merged_daily_product[p_display_col] = merged_daily_product[p_display_col].fillna(0) + merged_daily_product["寄样除运费外销售额"].fillna(0)
+        for col in ["销量", "销售额", p_col, p_display_col, "产品成本", "物流成本", "正常订单IVA", "寄样数", "寄样支出", "寄样IVA", "寄样总成本"]:
             if col in merged_daily_product.columns:
                 merged_daily_product[col] = pd.to_numeric(merged_daily_product[col], errors="coerce").fillna(0)
         sample_cost_mask = merged_daily_product["寄样支出"] > 0
