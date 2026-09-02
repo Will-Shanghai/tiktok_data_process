@@ -48,11 +48,11 @@ DEFAULT_STORES = [
         "enabled": 1,
         "country_code": "JP",
         "country_name": "日本",
-        "store_key": "cross-border",
+        "store_key": "cross_border",
         "store_name": "跨境店",
-        "store_dir": "cross-border",
+        "store_dir": "cross_border",
         "sheet_name": "日本_跨境店",
-        "说明": "日本跨境目录名为 cross-border",
+        "说明": "日本跨境目录名为 cross_border",
     },
     {
         "enabled": 1,
@@ -132,7 +132,7 @@ def ensure_runtime_dirs():
         (APP_ROOT / folder).mkdir(parents=True, exist_ok=True)
     for folder in [
         "data/data_JP/local",
-        "data/data_JP/cross-border",
+        "data/data_JP/cross_border",
         "data/data_JP/direct_old",
         "data/data_JP/direct_new",
         "data/data_VN/local",

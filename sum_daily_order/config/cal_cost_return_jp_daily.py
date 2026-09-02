@@ -121,9 +121,9 @@ JAPAN_STORES = [
         "enabled": True,
         "country_code": "jp",
         "country_name": "日本",
-        "store_key": "cross-border",
+        "store_key": "cross_border",
         "store_name": "跨境店",
-        "store_dir": "cross-border",
+        "store_dir": "cross_border",
         "sheet_name": "日本_跨境店",
     },
     {
