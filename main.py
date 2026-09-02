@@ -271,6 +271,7 @@ def run(site):
     ensure_runtime_dirs()
 
     os.environ["TIKTOK_REPORT_ROOT"] = str(APP_ROOT)
+    os.environ["TIKTOK_REPORT_VERSION"] = APP_VERSION
     if has_feishu_env():
         os.environ["USE_CONFIG_CACHE_FIRST"] = "0"
     else:

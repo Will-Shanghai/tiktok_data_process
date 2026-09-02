@@ -45,6 +45,22 @@ def find_project_root(start_dir):
 CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = find_project_root(CURRENT_SCRIPT_DIR)
 
+
+def read_runtime_version():
+    version_file = os.getenv("TIKTOK_REPORT_VERSION")
+    if version_file:
+        return str(version_file).strip().lstrip("vV") or "unversioned"
+    for base_dir in (PROJECT_ROOT, CURRENT_SCRIPT_DIR):
+        candidate = os.path.join(base_dir, "VERSION")
+        if os.path.exists(candidate):
+            version_text = open(candidate, encoding="utf-8").read().strip()
+            if version_text:
+                return version_text.lstrip("vV") or "unversioned"
+    return "unversioned"
+
+
+APP_VERSION = read_runtime_version()
+
 for env_path in [
     os.path.join(PROJECT_ROOT, "config", ".env"),
     os.path.join(CURRENT_SCRIPT_DIR, ".env"),
@@ -66,7 +82,7 @@ VIETNAM_EXCHANGE_RATE = float(os.getenv("VIETNAM_EXCHANGE_RATE", str(1 / 3883)))
 SKU_ID_COLUMN = "SKU ID"
 PRODUCT_CATEGORY_COLUMN = "产品大类"
 LOGISTICS_CAPACITY_COLUMN = "每单物流承载数量"
-CACHE_DIR = os.path.join(PROJECT_ROOT, "config", "cache")
+CACHE_DIR = os.path.join(PROJECT_ROOT, "config", "cache", APP_VERSION)
 os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_EXPIRY_HOURS = 24
 USE_CONFIG_CACHE_FIRST = os.getenv("USE_CONFIG_CACHE_FIRST", "").lower() in {"1", "true", "yes", "y"}
@@ -430,14 +446,14 @@ def build_period_comparison_frames(df_daily_product, daily_order_records):
         "寄样数": "sum",
         "销售额": "sum",
         "汇率后金额": "sum",
-        "P列折后价": "sum",
+        "除运费外销售额": "sum",
         "产品成本": "sum",
         "物流成本": "sum",
         "寄样支出": "sum",
         "日期": ["min", "max"],
     })
     period_summary.columns = [
-        "销量", "寄样数", "销售额", "汇率后金额", "P列折后价",
+        "销量", "寄样数", "销售额", "汇率后金额", "除运费外销售额",
         "产品成本", "物流成本", "寄样支出", "开始日期", "结束日期"
     ]
 
@@ -474,7 +490,7 @@ def build_period_comparison_frames(df_daily_product, daily_order_records):
         .set_index("文件名")
     )
 
-    metrics = ["订单数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "利润", "利润率", "销量", "寄样数"]
+    metrics = ["订单数", "销售额", "汇率后金额", "除运费外销售额", "产品成本", "物流成本", "寄样支出", "利润", "利润率", "销量", "寄样数"]
     frames = []
     ordered_files = list(period_summary.index)
 
@@ -571,7 +587,7 @@ def build_product_profit_by_period(df_daily_product):
         "寄样数": "sum",
         "销售额": "sum",
         "汇率后金额": "sum",
-        "P列折后价": "sum",
+        "除运费外销售额": "sum",
         "产品成本": "sum",
         "物流成本": "sum",
         "寄样支出": "sum",
@@ -583,11 +599,11 @@ def build_product_profit_by_period(df_daily_product):
         axis=1,
     )
 
-    numeric_cols = ["销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "总成本", "利润"]
+    numeric_cols = ["销售额", "汇率后金额", "除运费外销售额", "产品成本", "物流成本", "寄样支出", "总成本", "利润"]
     for col in numeric_cols:
         summary[col] = summary[col].round(2)
     return summary[[
-        "文件名", "产品名称", "销售额", "汇率后金额", "P列折后价",
+        "文件名", "产品名称", "销售额", "汇率后金额", "除运费外销售额",
         "产品成本", "物流成本", "寄样支出", "总成本", "利润", "利润率"
     ]]
 
@@ -602,7 +618,7 @@ def build_sku_profit_by_period(df_sku_detail):
         "寄样数": "sum",
         "销售额": "sum",
         "汇率后金额": "sum",
-        "P列折后价": "sum",
+        "除运费外销售额": "sum",
         "产品成本": "sum",
         "物流成本": "sum",
         "寄样支出": "sum",
@@ -614,11 +630,11 @@ def build_sku_profit_by_period(df_sku_detail):
         axis=1,
     )
 
-    numeric_cols = ["销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "总成本", "利润"]
+    numeric_cols = ["销售额", "汇率后金额", "除运费外销售额", "产品成本", "物流成本", "寄样支出", "总成本", "利润"]
     for col in numeric_cols:
         summary[col] = summary[col].round(2)
     return summary[[
-        "文件名", "产品大类", "产品名称", "销售额", "汇率后金额", "P列折后价",
+        "文件名", "产品大类", "产品名称", "销售额", "汇率后金额", "除运费外销售额",
         "产品成本", "物流成本", "寄样支出", "总成本", "利润", "利润率", "销量", "寄样数"
     ]]
 
@@ -760,6 +776,7 @@ def run_report(store_config, config_df, exchange_rate):
     n_col = "SKU Platform Discount"
     p_col = "SKU Subtotal After Discount"
     r_col = "Original Shipping Fee"
+    p_display_col = "除运费外销售额"
     logistics_col = "物流成本(元)"
     sample_cost_col = "寄样成本(元)"
     cancel_keywords = ["Canceled", "Cancelled", "Unpaid", "已取消", "未支付", "未付款", "部分发货后取消"]
@@ -800,6 +817,7 @@ def run_report(store_config, config_df, exchange_rate):
 
         for col in [n_col, p_col, r_col]:
             df_normal[col] = df_normal[col].map(parse_amount)
+        df_normal[p_display_col] = df_normal[n_col] + df_normal[p_col]
         df_normal["SKU_ID"] = clean_sku_str(df_normal[SKU_ID_COLUMN])
 
         df_normal = df_normal.merge(
@@ -828,6 +846,7 @@ def run_report(store_config, config_df, exchange_rate):
         norm_agg = df_normal.groupby(["日期", "Product Category", "Mapped Name"]).agg({
             n_col: "sum",
             p_col: "sum",
+            p_display_col: "sum",
             r_col: "sum",
             "产品成本(元)": "first",
             sample_cost_col: "first",
@@ -875,6 +894,9 @@ def run_report(store_config, config_df, exchange_rate):
 
         if not df_sample.empty:
             df_sample["SKU_ID"] = clean_sku_str(df_sample[SKU_ID_COLUMN])
+            for col in [n_col, p_col, r_col]:
+                df_sample[col] = df_sample[col].map(parse_amount)
+            df_sample[p_display_col] = df_sample[n_col] + df_sample[p_col]
             df_sample = df_sample.merge(
                 config_df[[SKU_ID_COLUMN, PRODUCT_CATEGORY_COLUMN, "中文简称", sample_cost_col]],
                 left_on="SKU_ID",
@@ -890,22 +912,23 @@ def run_report(store_config, config_df, exchange_rate):
 
             sample_daily_product = df_sample.groupby(["日期", "Product Category", "Mapped Name"]).agg({
                 sample_cost_col: "first",
+                p_display_col: "sum",
                 "SKU_ID": "count",
             }).reset_index()
             sample_daily_product.rename(columns={"SKU_ID": "寄样数"}, inplace=True)
             sample_daily_product["寄样支出"] = sample_daily_product["寄样数"] * sample_daily_product[sample_cost_col]
-            sample_daily_product = sample_daily_product[["日期", "Product Category", "Mapped Name", "寄样数", "寄样支出"]]
+            sample_daily_product = sample_daily_product[["日期", "Product Category", "Mapped Name", "寄样数", "寄样支出", p_display_col]]
         else:
-            sample_daily_product = pd.DataFrame(columns=["日期", "Product Category", "Mapped Name", "寄样数", "寄样支出"])
+            sample_daily_product = pd.DataFrame(columns=["日期", "Product Category", "Mapped Name", "寄样数", "寄样支出", p_display_col])
 
         merged_daily_product = norm_agg[[
-            "日期", "Product Category", "Mapped Name", "销量", "销售额", p_col, "产品成本", "物流成本"
+            "日期", "Product Category", "Mapped Name", "销量", "销售额", p_display_col, "产品成本", "物流成本"
         ]].merge(
             sample_daily_product,
             on=["日期", "Product Category", "Mapped Name"],
             how="outer",
         )
-        for col in ["销量", "销售额", p_col, "产品成本", "物流成本", "寄样数", "寄样支出"]:
+        for col in ["销量", "销售额", p_display_col, "产品成本", "物流成本", "寄样数", "寄样支出"]:
             if col in merged_daily_product.columns:
                 merged_daily_product[col] = pd.to_numeric(merged_daily_product[col], errors="coerce").fillna(0)
         merged_daily_product["汇率后金额"] = (merged_daily_product["销售额"] * exchange_rate).round(2)
@@ -920,7 +943,7 @@ def run_report(store_config, config_df, exchange_rate):
                 "寄样数": int(row["寄样数"]),
                 "销售额": round(row["销售额"], 2),
                 "汇率后金额": round(row["汇率后金额"], 2),
-                "P列折后价": round(row[p_col], 2),
+                "除运费外销售额": round(row[p_display_col], 2),
                 "产品成本": round(row["产品成本"], 2),
                 "物流成本": round(row["物流成本"], 2),
                 "寄样支出": round(row["寄样支出"], 2),
@@ -973,7 +996,7 @@ def run_report(store_config, config_df, exchange_rate):
         "寄样数": "sum",
         "销售额": "sum",
         "汇率后金额": "sum",
-        "P列折后价": "sum",
+        "除运费外销售额": "sum",
         "产品成本": "sum",
         "物流成本": "sum",
         "寄样支出": "sum",
@@ -983,7 +1006,7 @@ def run_report(store_config, config_df, exchange_rate):
         "寄样数": "sum",
         "销售额": "sum",
         "汇率后金额": "sum",
-        "P列折后价": "sum",
+        "除运费外销售额": "sum",
         "产品成本": "sum",
         "物流成本": "sum",
         "寄样支出": "sum",
@@ -999,7 +1022,7 @@ def run_report(store_config, config_df, exchange_rate):
     df_daily_summary = df_daily_summary.merge(df_order_count, on=["文件名", "日期"], how="left")
     df_daily_summary["订单数"] = df_daily_summary["订单数"].fillna(0).astype(int)
     df_daily_summary = df_daily_summary[[
-        "文件名", "日期", "订单数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
+        "文件名", "日期", "订单数", "销售额", "汇率后金额", "除运费外销售额", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
     ]]
     df_daily_summary = df_daily_summary.assign(temp_date=pd.to_datetime(df_daily_summary["日期"], errors="coerce")) \
         .sort_values(["文件名", "temp_date"]) \
@@ -1014,13 +1037,13 @@ def run_report(store_config, config_df, exchange_rate):
         .sort_values(["temp_date", "文件名", "产品名称"]) \
         .drop(columns=["temp_date"])
     df_daily_product = df_daily_product[[
-        "文件名", "日期", "产品名称", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
+        "文件名", "日期", "产品名称", "销售额", "汇率后金额", "除运费外销售额", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
     ]]
     df_sku_detail = df_sku_detail.assign(temp_date=pd.to_datetime(df_sku_detail["日期"], errors="coerce")) \
         .sort_values(["temp_date", "文件名", "产品大类", "产品名称"]) \
         .drop(columns=["temp_date"])
     df_sku_detail = df_sku_detail[[
-        "文件名", "日期", "产品大类", "产品名称", "订单数", "销售额", "汇率后金额", "P列折后价", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
+        "文件名", "日期", "产品大类", "产品名称", "订单数", "销售额", "汇率后金额", "除运费外销售额", "产品成本", "物流成本", "寄样支出", "销量", "寄样数"
     ]]
 
     period_comparison_frames = build_period_comparison_frames(df_daily_product, daily_order_records)
