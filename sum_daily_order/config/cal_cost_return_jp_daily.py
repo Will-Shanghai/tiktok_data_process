@@ -340,20 +340,6 @@ def get_config_dataframe(sheet_name, force_refresh=False):
     获取指定 Sheet 的配置 DataFrame，优先飞书，失败则用本地缓存
     """
     cache_file = get_cache_file_path(sheet_name)
-    cache_valid = False
-    if os.path.exists(cache_file) and not force_refresh:
-        mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
-        if datetime.now() - mtime < timedelta(hours=CACHE_EXPIRY_HOURS):
-            cache_valid = True
-
-    if cache_valid and USE_CONFIG_CACHE_FIRST and not force_refresh:
-        try:
-            df = pd.read_csv(cache_file, dtype=str, encoding='utf-8-sig')
-            df = clean_config_dataframe(df)
-            print(f"   ✅ 使用本地缓存配置（Sheet: {sheet_name}）")
-            return df
-        except Exception as e:
-            print(f"   ⚠️ 缓存读取失败: {e}，尝试刷新")
 
     try:
         if not FEISHU_APP_ID or not FEISHU_APP_SECRET or not FEISHU_SHEET_TOKEN:
@@ -891,6 +877,7 @@ def run_report(combo, config_df, exchange_rate):
     sample_quantity_records = []
     daily_order_records = []
     unmatched_skus = set()
+    missing_cost_skus = set()
 
     for file_path in file_list:
         file_name = os.path.basename(file_path)
@@ -932,6 +919,10 @@ def run_report(combo, config_df, exchange_rate):
         if not missing.empty:
             for sku in missing['SKU_ID'].unique():
                 unmatched_skus.add(sku)
+        cost_missing_mask = df_normal['产品成本(元)'].fillna(0) <= 0
+        if cost_missing_mask.any():
+            for sku in df_normal.loc[cost_missing_mask, 'SKU_ID'].unique():
+                missing_cost_skus.add(sku)
 
         df_normal['Mapped Name'] = df_normal['中文简称'].fillna(df_normal['SKU_ID'])
         df_normal['Product Category'] = df_normal[PRODUCT_CATEGORY_COLUMN].fillna(df_normal['Mapped Name'])
@@ -969,6 +960,10 @@ def run_report(combo, config_df, exchange_rate):
             if not missing_s.empty:
                 for sku in missing_s['SKU_ID'].unique():
                     unmatched_skus.add(sku)
+            sample_cost_missing_mask = df_sample['产品成本(元)'].fillna(0) <= 0
+            if sample_cost_missing_mask.any():
+                for sku in df_sample.loc[sample_cost_missing_mask, 'SKU_ID'].unique():
+                    missing_cost_skus.add(sku)
             df_sample['Mapped Name'] = df_sample['中文简称'].fillna(df_sample['SKU_ID'])
             df_sample['Product Category'] = df_sample[PRODUCT_CATEGORY_COLUMN].fillna(df_sample['Mapped Name'])
 
@@ -1271,6 +1266,10 @@ def run_report(combo, config_df, exchange_rate):
         if unmatched_skus:
             print(f"💡 [{display_name}] 提醒：以下 SKU ID 在配置表中未找到匹配项:")
             for sku in sorted(list(unmatched_skus)):
+                print(f"   - {sku}")
+        if missing_cost_skus:
+            print(f"💡 [{display_name}] 提醒：以下 SKU 在配置表中缺少产品成本，已按 0 处理:")
+            for sku in sorted(list(missing_cost_skus)):
                 print(f"   - {sku}")
     except Exception as e:
         print(f"❌ [{display_name}] 保存失败: {e}")

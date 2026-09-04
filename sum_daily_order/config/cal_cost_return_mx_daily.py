@@ -70,17 +70,27 @@ load_dotenv()
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 FEISHU_SHEET_TOKEN = os.getenv("FEISHU_SHEET_TOKEN_AMERICAS") or os.getenv("FEISHU_SHEET_TOKEN_MX") or os.getenv("FEISHU_SHEET_TOKEN") or ""
-FEISHU_RANGE_SKU = "A:E"
+FEISHU_RANGE_SKU = "A:Z"
 FEISHU_REQUIRED_SCOPE_HINT = "请在飞书开放平台给应用开通 sheets:spreadsheet:readonly 或 sheets:spreadsheet:read 权限，并重新发布/生效。"
 
 MEXICO_EXCHANGE_RATE = os.getenv("MEXICO_EXCHANGE_RATE")
 MX_PER_ORDER_ITEM_FEE_MXN = 6.0
 MX_IVA_BASE_RATE = 0.80
 MX_IVA_RATE = 0.335
+MX_LOCAL_STORE_KEYS = {"local"}
+MX_DIRECT_STORE_KEYS = {"direct_old", "direct_new"}
 
 SKU_ID_COLUMN = "SKU ID"
 PRODUCT_NAME_COLUMN = "中文简称"
 PRODUCT_CATEGORY_COLUMN = "产品大类"
+LOGISTICS_COST_COLUMN = "物流成本(元)"
+HEAD_LOGISTICS_COST_COLUMN = "头程物流成本(元)"
+TAIL_LOGISTICS_COST_COLUMN = "尾程物流成本(元)"
+LOCAL_LOGISTICS_UNIT_COLUMN = "_本土店单件物流成本"
+SAMPLE_COST_COLUMN = "寄样成本(元)"
+LOGISTICS_CAPACITY_COLUMN = "每单物流承载数量"
+IMPORT_IVA_COLUMN = "进口IVA"
+ACTUAL_WEIGHT_KG_COLUMN = "实重kg"
 WEIGHT_KG_COLUMN = "计费重kg"
 LENGTH_CM_COLUMN = "长cm"
 WIDTH_CM_COLUMN = "宽cm"
@@ -95,6 +105,15 @@ USE_CONFIG_CACHE_FIRST = os.getenv("USE_CONFIG_CACHE_FIRST", "").lower() in {"1"
 SHEET_ID_CACHE = {}
 
 MEXICO_STORES = [
+    {
+        "enabled": True,
+        "country_code": "MX",
+        "country_name": "墨西哥",
+        "store_key": "local",
+        "store_name": "本土店",
+        "store_dir": "local",
+        "sheet_name": "墨西哥_本土店",
+    },
     {
         "enabled": True,
         "country_code": "MX",
@@ -235,6 +254,12 @@ def clean_config_dataframe(df):
     df = clean_sku_id_column(df)
     if "SKU中文简称" in df.columns and PRODUCT_NAME_COLUMN not in df.columns:
         df = df.rename(columns={"SKU中文简称": PRODUCT_NAME_COLUMN})
+    if ACTUAL_WEIGHT_KG_COLUMN not in df.columns:
+        if "计费重量kg" in df.columns:
+            df = df.rename(columns={"计费重量kg": ACTUAL_WEIGHT_KG_COLUMN})
+        elif "计费重量g" in df.columns:
+            df = df.rename(columns={"计费重量g": ACTUAL_WEIGHT_KG_COLUMN})
+
     if WEIGHT_KG_COLUMN not in df.columns:
         if "计费重量kg" in df.columns:
             df = df.rename(columns={"计费重量kg": WEIGHT_KG_COLUMN})
@@ -251,9 +276,13 @@ def clean_config_dataframe(df):
         if PRODUCT_NAME_COLUMN in df.columns:
             df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].fillna(df[PRODUCT_NAME_COLUMN])
 
+    if ACTUAL_WEIGHT_KG_COLUMN not in df.columns:
+        df[ACTUAL_WEIGHT_KG_COLUMN] = 0.0
     if WEIGHT_KG_COLUMN not in df.columns:
         df[WEIGHT_KG_COLUMN] = 0.0
+    df[ACTUAL_WEIGHT_KG_COLUMN] = pd.to_numeric(df[ACTUAL_WEIGHT_KG_COLUMN], errors="coerce").fillna(0.0)
     df[WEIGHT_KG_COLUMN] = pd.to_numeric(df[WEIGHT_KG_COLUMN], errors="coerce").fillna(0.0)
+    df.loc[df[ACTUAL_WEIGHT_KG_COLUMN] <= 0, ACTUAL_WEIGHT_KG_COLUMN] = 0.0
     df.loc[df[WEIGHT_KG_COLUMN] <= 0, WEIGHT_KG_COLUMN] = 0.0
 
     for col in [LENGTH_CM_COLUMN, WIDTH_CM_COLUMN, HEIGHT_CM_COLUMN]:
@@ -265,6 +294,9 @@ def clean_config_dataframe(df):
     if "产品成本(元)" not in df.columns:
         df["产品成本(元)"] = 0.0
     df["产品成本(元)"] = pd.to_numeric(df["产品成本(元)"], errors="coerce").fillna(0.0)
+    for col in [LOGISTICS_COST_COLUMN, HEAD_LOGISTICS_COST_COLUMN, TAIL_LOGISTICS_COST_COLUMN, SAMPLE_COST_COLUMN, LOGISTICS_CAPACITY_COLUMN, IMPORT_IVA_COLUMN]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
     return df
 
 
@@ -275,20 +307,6 @@ def get_cache_file_path(sheet_name):
 
 def get_config_dataframe(sheet_name, force_refresh=False):
     cache_file = get_cache_file_path(sheet_name)
-    cache_valid = False
-    if os.path.exists(cache_file) and not force_refresh:
-        mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
-        if datetime.now() - mtime < timedelta(hours=CACHE_EXPIRY_HOURS):
-            cache_valid = True
-
-    if cache_valid and USE_CONFIG_CACHE_FIRST and not force_refresh:
-        try:
-            df = pd.read_csv(cache_file, dtype=str, encoding="utf-8-sig")
-            df = clean_config_dataframe(df)
-            print(f"   ✅ 使用本地缓存配置（Sheet: {sheet_name}）")
-            return df
-        except Exception as e:
-            print(f"   ⚠️ 缓存读取失败: {e}，尝试刷新")
 
     try:
         if not FEISHU_APP_ID or not FEISHU_APP_SECRET or not FEISHU_SHEET_TOKEN:
@@ -330,6 +348,13 @@ def clean_sku_str(sku_series):
     return sku_series.astype(str).str.replace(r"\.0$", "", regex=True).str.strip()
 
 
+def drop_conflicting_config_columns(df, config_cols):
+    conflict_cols = [col for col in config_cols if col in df.columns and col != SKU_ID_COLUMN]
+    if conflict_cols:
+        df = df.drop(columns=conflict_cols)
+    return df
+
+
 def parse_order_date(value):
     if pd.isna(value):
         return pd.NA
@@ -349,13 +374,48 @@ def parse_order_date(value):
             return pd.NA
 
 
-def validate_config_columns(config_df, sheet_name):
-    required_cols = [SKU_ID_COLUMN, PRODUCT_NAME_COLUMN, "产品成本(元)", WEIGHT_KG_COLUMN]
+def get_item_quantity(df):
+    if "Quantity" not in df.columns:
+        return pd.Series(1, index=df.index, dtype="float64")
+    qty = pd.to_numeric(df["Quantity"], errors="coerce").fillna(1)
+    qty.loc[qty <= 0] = 1
+    return qty
+
+
+def get_order_key(df):
+    if "Order ID" in df.columns:
+        order_key = df["Order ID"].astype(str).str.strip()
+        missing_order = order_key.isna() | order_key.eq("") | order_key.eq("nan")
+        return order_key.mask(missing_order, "ROW_" + df.index.astype(str))
+    return "ROW_" + df.index.astype(str)
+
+
+def validate_config_columns(config_df, sheet_name, store_key=None):
+    required_cols = [SKU_ID_COLUMN, PRODUCT_NAME_COLUMN, "产品成本(元)", PRODUCT_CATEGORY_COLUMN]
+    if store_key in MX_LOCAL_STORE_KEYS:
+        required_cols.extend([HEAD_LOGISTICS_COST_COLUMN, TAIL_LOGISTICS_COST_COLUMN])
+    else:
+        required_cols.extend([WEIGHT_KG_COLUMN])
     missing = [col for col in required_cols if col not in config_df.columns]
     if missing:
         raise ValueError(f"配置表 {sheet_name} 缺少列: {', '.join(missing)}")
     if config_df.empty:
         raise ValueError(f"配置表 {sheet_name} 没有 SKU 数据，请先补充 SKU ID、SKU中文简称和成本信息")
+
+
+def get_config_merge_columns(config_df, store_key, include_sample_cost=True):
+    cols = [SKU_ID_COLUMN, PRODUCT_CATEGORY_COLUMN, PRODUCT_NAME_COLUMN, "产品成本(元)"]
+    if IMPORT_IVA_COLUMN in config_df.columns:
+        cols.append(IMPORT_IVA_COLUMN)
+    if store_key in MX_LOCAL_STORE_KEYS:
+        for col in [HEAD_LOGISTICS_COST_COLUMN, TAIL_LOGISTICS_COST_COLUMN, LOGISTICS_CAPACITY_COLUMN]:
+            if col in config_df.columns:
+                cols.append(col)
+    else:
+        for col in [ACTUAL_WEIGHT_KG_COLUMN, WEIGHT_KG_COLUMN, LENGTH_CM_COLUMN, WIDTH_CM_COLUMN, HEIGHT_CM_COLUMN]:
+            if col in config_df.columns:
+                cols.append(col)
+    return cols
 
 
 def safe_change_rate(current, previous):
@@ -368,6 +428,72 @@ def format_percent(value):
     if value == "" or pd.isna(value):
         return ""
     return f"{value:.2%}"
+
+
+def build_order_logistics_allocation(df_normal, logistics_col):
+    result_cols = ["日期", "Product Category", "Mapped Name", "物流成本"]
+    if df_normal.empty:
+        return pd.DataFrame(columns=result_cols)
+
+    df_calc = df_normal.copy()
+    df_calc["_OrderKey"] = get_order_key(df_calc)
+    qty_source = df_calc[ITEM_QUANTITY_COLUMN] if ITEM_QUANTITY_COLUMN in df_calc.columns else pd.Series(1, index=df_calc.index)
+    df_calc[ITEM_QUANTITY_COLUMN] = pd.to_numeric(qty_source, errors="coerce").fillna(1)
+    df_calc.loc[df_calc[ITEM_QUANTITY_COLUMN] <= 0, ITEM_QUANTITY_COLUMN] = 1
+    logistics_source = df_calc[logistics_col] if logistics_col in df_calc.columns else pd.Series(0, index=df_calc.index)
+    df_calc["_LineLogistics"] = pd.to_numeric(logistics_source, errors="coerce").fillna(0) * df_calc[ITEM_QUANTITY_COLUMN]
+    capacity_source = df_calc[LOGISTICS_CAPACITY_COLUMN] if LOGISTICS_CAPACITY_COLUMN in df_calc.columns else pd.Series(1, index=df_calc.index)
+    df_calc[LOGISTICS_CAPACITY_COLUMN] = pd.to_numeric(capacity_source, errors="coerce").fillna(1)
+    df_calc.loc[df_calc[LOGISTICS_CAPACITY_COLUMN] <= 0, LOGISTICS_CAPACITY_COLUMN] = 1
+
+    category_order = df_calc.groupby(["_OrderKey", "日期", "Product Category"]).agg(
+        category_qty=(ITEM_QUANTITY_COLUMN, "sum"),
+        original_logistics=("_LineLogistics", "sum"),
+        unit_logistics=(logistics_col, "max"),
+        capacity=(LOGISTICS_CAPACITY_COLUMN, "max"),
+    ).reset_index()
+    category_order["_capacity_logistics"] = category_order.apply(
+        lambda row: math.ceil(row["category_qty"] / row["capacity"]) * row["unit_logistics"],
+        axis=1,
+    )
+    category_order["candidate_logistics"] = category_order[["original_logistics", "_capacity_logistics"]].min(axis=1)
+    order_max = category_order.groupby("_OrderKey")["candidate_logistics"].transform("max")
+    order_sum = category_order.groupby("_OrderKey")["candidate_logistics"].transform("sum")
+    category_order["category_logistics"] = category_order.apply(
+        lambda row: 0 if order_sum.loc[row.name] == 0 else order_max.loc[row.name] * row["candidate_logistics"] / order_sum.loc[row.name],
+        axis=1,
+    )
+
+    sku_order = df_calc.groupby(["_OrderKey", "日期", "Product Category", "Mapped Name"]).agg(
+        sku_qty=(ITEM_QUANTITY_COLUMN, "sum"),
+        sku_original_logistics=("_LineLogistics", "sum"),
+    ).reset_index()
+    sku_order = sku_order.merge(
+        category_order[["_OrderKey", "日期", "Product Category", "category_qty", "original_logistics", "category_logistics"]],
+        on=["_OrderKey", "日期", "Product Category"],
+        how="left",
+    )
+    sku_order["物流成本"] = sku_order.apply(
+        lambda row: (
+            0
+            if row["category_qty"] == 0
+            else row["category_logistics"] * (
+                row["sku_original_logistics"] / row["original_logistics"]
+                if row["original_logistics"] != 0
+                else row["sku_qty"] / row["category_qty"]
+            )
+        ),
+        axis=1,
+    )
+    return sku_order.groupby(["日期", "Product Category", "Mapped Name"])["物流成本"].sum().reset_index()
+
+
+def build_mx_local_unit_logistics(df):
+    df_calc = df.copy()
+    head = pd.to_numeric(df_calc[HEAD_LOGISTICS_COST_COLUMN] if HEAD_LOGISTICS_COST_COLUMN in df_calc.columns else pd.Series(0, index=df_calc.index), errors="coerce").fillna(0)
+    tail = pd.to_numeric(df_calc[TAIL_LOGISTICS_COST_COLUMN] if TAIL_LOGISTICS_COST_COLUMN in df_calc.columns else pd.Series(0, index=df_calc.index), errors="coerce").fillna(0)
+    df_calc[LOCAL_LOGISTICS_UNIT_COLUMN] = head + tail
+    return df_calc
 
 
 def get_mx_freight_cost_mxn(billable_weight_kg):
@@ -397,22 +523,42 @@ def get_mx_freight_cost_mxn(billable_weight_kg):
         (13.0, 2762),
         (14.0, 2996),
     ]
-    weight = max(float(billable_weight_kg or 0), 0.01)
+    weight = max(float(billable_weight_kg or 0), 0.0)
+    if weight <= 0:
+        return 0
     for upper_bound, price in rate_cards:
         if weight <= upper_bound:
             return price
     return 3230
 
 
-def calc_mexico_billable_weight_kg(actual_weight_kg, length_cm, width_cm, height_cm, quantity=1):
-    actual_weight = max(float(actual_weight_kg or 0), 0.0) * max(float(quantity or 0), 0.0)
+def calc_mexico_billable_weight_kg(actual_weight_kg, length_cm, width_cm, height_cm, quantity=1, billed_weight_kg=None):
+    qty = max(float(quantity or 0), 0.0)
+    actual_weight = max(float(actual_weight_kg or 0), 0.0)
     length = max(float(length_cm or 0), 0.0)
     width = max(float(width_cm or 0), 0.0)
     height = max(float(height_cm or 0), 0.0)
-    volume_weight = (length * width * height / 8000.0) * max(float(quantity or 0), 0.0)
+    billed_weight = max(float(billed_weight_kg or 0), 0.0)
+
+    if actual_weight <= 0 or length <= 0 or width <= 0 or height <= 0:
+        return 0.0
+
+    actual_weight = actual_weight * qty
+    volume_weight = (length * width * height / 8000.0) * qty
+    if billed_weight > 0:
+        return billed_weight * qty
     if volume_weight > actual_weight * MX_VOLUME_WEIGHT_TRIGGER_RATIO:
         return volume_weight
     return actual_weight
+
+
+def calc_mexico_iva_amount(import_iva_value, fallback_base_amount, quantity=1):
+    iva_value = parse_amount(import_iva_value)
+    qty = max(float(quantity or 0), 0.0)
+    if iva_value != 0:
+        return round(abs(iva_value) * max(qty, 1.0), 2)
+    base_amount = max(float(fallback_base_amount or 0), 0.0)
+    return round(base_amount * MX_IVA_BASE_RATE * MX_IVA_RATE, 2)
 
 
 def build_mexico_direct_logistics_allocation(df_normal, exchange_rate):
@@ -446,11 +592,12 @@ def build_mexico_direct_logistics_allocation(df_normal, exchange_rate):
         df_calc.loc[df_calc[col] < 0, col] = 0
     df_calc["_LineWeightKg"] = df_calc.apply(
         lambda row: calc_mexico_billable_weight_kg(
-            row[WEIGHT_KG_COLUMN],
+            row[ACTUAL_WEIGHT_KG_COLUMN],
             row[LENGTH_CM_COLUMN],
             row[WIDTH_CM_COLUMN],
             row[HEIGHT_CM_COLUMN],
             row[ITEM_QUANTITY_COLUMN],
+            row[WEIGHT_KG_COLUMN],
         ),
         axis=1,
     )
@@ -803,7 +950,8 @@ def run_report(store_config, config_df, exchange_rate):
     store_dir = store_config["store_dir"]
     display_name = f"{country_name}_{store_name}"
 
-    validate_config_columns(config_df, store_config["sheet_name"])
+    validate_config_columns(config_df, store_config["sheet_name"], store_key)
+    is_local_store = store_key in MX_LOCAL_STORE_KEYS
 
     folder_path = os.path.normpath(os.path.join(PROJECT_ROOT, "data", f"data_{country_code}", store_dir))
     output_filename = os.path.normpath(os.path.join(PROJECT_ROOT, f"result/Daily_Performance_Report_{country_code.upper()}_{store_key}.xlsx"))
@@ -827,17 +975,10 @@ def run_report(store_config, config_df, exchange_rate):
     sample_quantity_records = []
     daily_order_records = []
     unmatched_skus = set()
+    missing_cost_skus = set()
+    missing_weight_skus = set()
 
-    config_merge_cols = [
-        SKU_ID_COLUMN,
-        PRODUCT_CATEGORY_COLUMN,
-        PRODUCT_NAME_COLUMN,
-        "产品成本(元)",
-        WEIGHT_KG_COLUMN,
-        LENGTH_CM_COLUMN,
-        WIDTH_CM_COLUMN,
-        HEIGHT_CM_COLUMN,
-    ]
+    config_merge_cols = get_config_merge_columns(config_df, store_key, include_sample_cost=True)
 
     for file_path in file_list:
         file_name = os.path.basename(file_path)
@@ -875,14 +1016,40 @@ def run_report(store_config, config_df, exchange_rate):
             df_normal[ITEM_QUANTITY_COLUMN] = 1
         df_normal.loc[df_normal[ITEM_QUANTITY_COLUMN] <= 0, ITEM_QUANTITY_COLUMN] = 1
 
+        df_normal = drop_conflicting_config_columns(df_normal, config_merge_cols)
         df_normal = df_normal.merge(config_df[config_merge_cols], left_on="SKU_ID", right_on=SKU_ID_COLUMN, how="left")
         missing = df_normal[df_normal[PRODUCT_NAME_COLUMN].isna()]
         if not missing.empty:
             for sku in missing["SKU_ID"].unique():
                 unmatched_skus.add(sku)
+        cost_missing_mask = df_normal["产品成本(元)"].fillna(0) <= 0
+        if cost_missing_mask.any():
+            for sku in df_normal.loc[cost_missing_mask, "SKU_ID"].unique():
+                missing_cost_skus.add(sku)
+        if not is_local_store:
+            weight_missing_mask = (
+                (df_normal[ACTUAL_WEIGHT_KG_COLUMN].fillna(0) <= 0)
+                | (df_normal[LENGTH_CM_COLUMN].fillna(0) <= 0)
+                | (df_normal[WIDTH_CM_COLUMN].fillna(0) <= 0)
+                | (df_normal[HEIGHT_CM_COLUMN].fillna(0) <= 0)
+            )
+            if weight_missing_mask.any():
+                for sku in df_normal.loc[weight_missing_mask, "SKU_ID"].unique():
+                    missing_weight_skus.add(sku)
 
         df_normal["Mapped Name"] = df_normal[PRODUCT_NAME_COLUMN].fillna(df_normal["SKU_ID"])
         df_normal["Product Category"] = df_normal[PRODUCT_CATEGORY_COLUMN].fillna(df_normal["Mapped Name"])
+        if is_local_store:
+            df_normal["正常订单IVA_行"] = 0.0
+        else:
+            df_normal["正常订单IVA_行"] = df_normal.apply(
+                lambda row: calc_mexico_iva_amount(
+                    row.get(IMPORT_IVA_COLUMN, 0),
+                    row[n_col] + row[p_col] + row[r_col],
+                    row[ITEM_QUANTITY_COLUMN],
+                ),
+                axis=1,
+            )
         if "Order ID" in df_normal.columns:
             daily_order_records.extend(
                 df_normal[["日期", "Order ID"]]
@@ -911,23 +1078,41 @@ def run_report(store_config, config_df, exchange_rate):
             else:
                 df_sample[ITEM_QUANTITY_COLUMN] = 1
             df_sample.loc[df_sample[ITEM_QUANTITY_COLUMN] <= 0, ITEM_QUANTITY_COLUMN] = 1
+            df_sample = drop_conflicting_config_columns(df_sample, config_merge_cols)
             df_sample = df_sample.merge(config_df[config_merge_cols], left_on="SKU_ID", right_on=SKU_ID_COLUMN, how="left")
             missing_s = df_sample[df_sample[PRODUCT_NAME_COLUMN].isna()]
             if not missing_s.empty:
                 for sku in missing_s["SKU_ID"].unique():
                     unmatched_skus.add(sku)
+            sample_cost_missing_mask = df_sample["产品成本(元)"].fillna(0) <= 0
+            if sample_cost_missing_mask.any():
+                for sku in df_sample.loc[sample_cost_missing_mask, "SKU_ID"].unique():
+                    missing_cost_skus.add(sku)
+            if not is_local_store:
+                sample_weight_missing_mask = (
+                    (df_sample[ACTUAL_WEIGHT_KG_COLUMN].fillna(0) <= 0)
+                    | (df_sample[LENGTH_CM_COLUMN].fillna(0) <= 0)
+                    | (df_sample[WIDTH_CM_COLUMN].fillna(0) <= 0)
+                    | (df_sample[HEIGHT_CM_COLUMN].fillna(0) <= 0)
+                )
+                if sample_weight_missing_mask.any():
+                    for sku in df_sample.loc[sample_weight_missing_mask, "SKU_ID"].unique():
+                        missing_weight_skus.add(sku)
             df_sample["Mapped Name"] = df_sample[PRODUCT_NAME_COLUMN].fillna(df_sample["SKU_ID"])
             df_sample["Product Category"] = df_sample[PRODUCT_CATEGORY_COLUMN].fillna(df_sample["Mapped Name"])
 
-        normal_daily_product = df_normal.groupby(["日期", "Product Category", "Mapped Name"]).agg({
+        normal_agg = {
             n_col: "sum",
             p_col: "sum",
             p_display_col: "sum",
             r_col: "sum",
             "产品成本(元)": "first",
-            WEIGHT_KG_COLUMN: "first",
             ITEM_QUANTITY_COLUMN: "sum",
-        }).reset_index()
+            "正常订单IVA_行": "sum",
+        }
+        if not is_local_store and WEIGHT_KG_COLUMN in df_normal.columns:
+            normal_agg[WEIGHT_KG_COLUMN] = "first"
+        normal_daily_product = df_normal.groupby(["日期", "Product Category", "Mapped Name"]).agg(normal_agg).reset_index()
         normal_daily_product.rename(columns={ITEM_QUANTITY_COLUMN: "销量"}, inplace=True)
         if "Order ID" in df_normal.columns:
             sku_daily_order_count = (
@@ -946,10 +1131,16 @@ def run_report(store_config, config_df, exchange_rate):
             sku_daily_order_count = normal_daily_product[["日期", "Product Category", "Mapped Name", "销量"]].copy()
             sku_daily_order_count.rename(columns={"销量": "订单数"}, inplace=True)
 
-        normal_daily_product["销售额"] = normal_daily_product[n_col] + normal_daily_product[p_col] + normal_daily_product[r_col]
+        if is_local_store:
+            normal_daily_product["销售额"] = normal_daily_product[n_col] + normal_daily_product[p_col]
+        else:
+            normal_daily_product["销售额"] = normal_daily_product[n_col] + normal_daily_product[p_col] + normal_daily_product[r_col]
         normal_daily_product["产品成本"] = normal_daily_product["销量"] * normal_daily_product["产品成本(元)"]
-        normal_daily_product["正常订单IVA"] = (normal_daily_product["销售额"] * MX_IVA_BASE_RATE * MX_IVA_RATE * exchange_rate).round(2)
-        logistics_daily_product = build_mexico_direct_logistics_allocation(df_normal, exchange_rate)
+        if is_local_store:
+            df_normal_local = build_mx_local_unit_logistics(df_normal)
+            logistics_daily_product = build_order_logistics_allocation(df_normal_local, LOCAL_LOGISTICS_UNIT_COLUMN)
+        else:
+            logistics_daily_product = build_mexico_direct_logistics_allocation(df_normal, exchange_rate)
         normal_daily_product = normal_daily_product.merge(
             logistics_daily_product,
             on=["日期", "Product Category", "Mapped Name"],
@@ -962,38 +1153,71 @@ def run_report(store_config, config_df, exchange_rate):
             for col in [n_col, p_col, r_col]:
                 df_sample[col] = df_sample[col].map(parse_amount)
             df_sample["寄样除运费外销售额"] = df_sample[n_col] + df_sample[p_col]
-            sample_daily_product = df_sample.groupby(["日期", "Product Category", "Mapped Name"]).agg({
+            sample_logistics_source_col = None
+            if is_local_store:
+                sample_logistics_source_col = LOGISTICS_COST_COLUMN if LOGISTICS_COST_COLUMN in df_sample.columns else HEAD_LOGISTICS_COST_COLUMN if HEAD_LOGISTICS_COST_COLUMN in df_sample.columns else None
+            sample_agg = {
                 n_col: "sum",
                 p_col: "sum",
                 "寄样除运费外销售额": "sum",
                 r_col: "sum",
                 "产品成本(元)": "first",
-                WEIGHT_KG_COLUMN: "first",
                 ITEM_QUANTITY_COLUMN: "sum",
-            }).reset_index()
+            }
+            if not is_local_store and WEIGHT_KG_COLUMN in df_sample.columns:
+                sample_agg[WEIGHT_KG_COLUMN] = "first"
+            if sample_logistics_source_col and sample_logistics_source_col in df_sample.columns:
+                sample_agg[sample_logistics_source_col] = "first"
+            if is_local_store and HEAD_LOGISTICS_COST_COLUMN in df_sample.columns and TAIL_LOGISTICS_COST_COLUMN in df_sample.columns:
+                sample_agg[HEAD_LOGISTICS_COST_COLUMN] = "first"
+                sample_agg[TAIL_LOGISTICS_COST_COLUMN] = "first"
+            if is_local_store:
+                df_sample["寄样IVA_行"] = 0.0
+            else:
+                df_sample["寄样IVA_行"] = df_sample.apply(
+                    lambda row: calc_mexico_iva_amount(
+                        row.get(IMPORT_IVA_COLUMN, 0),
+                        row[p_col],
+                        row[ITEM_QUANTITY_COLUMN],
+                    ),
+                    axis=1,
+                )
+                sample_agg["寄样IVA_行"] = "sum"
+            if is_local_store:
+                sample_agg["寄样IVA_行"] = "sum"
+            sample_daily_product = df_sample.groupby(["日期", "Product Category", "Mapped Name"]).agg(sample_agg).reset_index()
             sample_daily_product.rename(columns={ITEM_QUANTITY_COLUMN: "寄样数"}, inplace=True)
-            sample_daily_product["寄样销售额"] = sample_daily_product[n_col] + sample_daily_product[p_col] + sample_daily_product[r_col]
-            sample_logistics = build_mexico_direct_logistics_allocation(df_sample, exchange_rate)
-            sample_daily_product = sample_daily_product.merge(
-                sample_logistics.rename(columns={"物流成本": "寄样物流成本"}),
-                on=["日期", "Product Category", "Mapped Name"],
-                how="left",
-            )
-            sample_daily_product["寄样物流成本"] = sample_daily_product["寄样物流成本"].fillna(0)
-            sample_daily_product["寄样支出"] = (
-                sample_daily_product["寄样数"] * sample_daily_product["产品成本(元)"]
-                + sample_daily_product["寄样物流成本"]
-            )
-            sample_daily_product["寄样IVA"] = (
-                pd.to_numeric(sample_daily_product[p_col], errors="coerce").fillna(0)
-                * MX_IVA_BASE_RATE
-                * MX_IVA_RATE
-            ).round(2)
-            sample_daily_product["寄样总成本"] = sample_daily_product["寄样支出"]
+            if is_local_store:
+                sample_daily_product["寄样销售额"] = sample_daily_product[n_col] + sample_daily_product[p_col]
+            else:
+                sample_daily_product["寄样销售额"] = sample_daily_product[n_col] + sample_daily_product[p_col] + sample_daily_product[r_col]
+            if is_local_store:
+                head_series = pd.to_numeric(sample_daily_product[HEAD_LOGISTICS_COST_COLUMN], errors="coerce").fillna(0) if HEAD_LOGISTICS_COST_COLUMN in sample_daily_product.columns else pd.Series(0, index=sample_daily_product.index)
+                tail_series = pd.to_numeric(sample_daily_product[TAIL_LOGISTICS_COST_COLUMN], errors="coerce").fillna(0) if TAIL_LOGISTICS_COST_COLUMN in sample_daily_product.columns else pd.Series(0, index=sample_daily_product.index)
+                sample_unit_cost = pd.to_numeric(sample_daily_product["产品成本(元)"], errors="coerce").fillna(0) + head_series + tail_series
+                sample_daily_product["寄样支出"] = sample_daily_product["寄样数"] * sample_unit_cost
+                sample_daily_product["寄样IVA"] = 0.0
+                sample_daily_product["寄样总成本"] = sample_daily_product["寄样支出"]
+            else:
+                sample_logistics = build_mexico_direct_logistics_allocation(df_sample, exchange_rate)
+                sample_daily_product = sample_daily_product.merge(
+                    sample_logistics.rename(columns={"物流成本": "寄样物流成本"}),
+                    on=["日期", "Product Category", "Mapped Name"],
+                    how="left",
+                )
+                sample_daily_product["寄样物流成本"] = sample_daily_product["寄样物流成本"].fillna(0)
+                sample_daily_product["寄样支出"] = (
+                    sample_daily_product["寄样数"] * sample_daily_product["产品成本(元)"]
+                    + sample_daily_product["寄样物流成本"]
+                )
+                sample_daily_product["寄样IVA"] = sample_daily_product["寄样IVA_行"].fillna(0) * exchange_rate
+                sample_daily_product["寄样总成本"] = sample_daily_product["寄样支出"] + sample_daily_product["寄样IVA"]
+            if is_local_store:
+                sample_daily_product["寄样IVA"] = sample_daily_product["寄样IVA_行"].fillna(0)
             sample_daily_product = sample_daily_product[["日期", "Product Category", "Mapped Name", "寄样数", "寄样销售额", "寄样支出", "寄样IVA", "寄样总成本", "寄样除运费外销售额"]]
 
         merged_daily_product = normal_daily_product[[
-            "日期", "Product Category", "Mapped Name", "销量", "销售额", p_col, p_display_col, "产品成本", "物流成本", "正常订单IVA"
+            "日期", "Product Category", "Mapped Name", "销量", "销售额", p_col, p_display_col, "产品成本", "物流成本", "正常订单IVA_行"
         ]].merge(
             sample_daily_product,
             on=["日期", "Product Category", "Mapped Name"],
@@ -1003,14 +1227,18 @@ def run_report(store_config, config_df, exchange_rate):
             merged_daily_product["销售额"] = merged_daily_product["销售额"].fillna(0) + merged_daily_product["寄样销售额"].fillna(0)
         if "寄样除运费外销售额" in merged_daily_product.columns:
             merged_daily_product[p_display_col] = merged_daily_product[p_display_col].fillna(0) + merged_daily_product["寄样除运费外销售额"].fillna(0)
+        if "正常订单IVA_行" in merged_daily_product.columns:
+            merged_daily_product = merged_daily_product.rename(columns={"正常订单IVA_行": "正常订单IVA"})
         for col in ["销量", "销售额", p_col, p_display_col, "产品成本", "物流成本", "正常订单IVA", "寄样数", "寄样支出", "寄样IVA", "寄样总成本"]:
             if col in merged_daily_product.columns:
                 merged_daily_product[col] = pd.to_numeric(merged_daily_product[col], errors="coerce").fillna(0)
-        sample_cost_mask = merged_daily_product["寄样支出"] > 0
-        merged_daily_product.loc[sample_cost_mask, "寄样IVA"] = (
-            merged_daily_product.loc[sample_cost_mask, p_col] * MX_IVA_BASE_RATE * MX_IVA_RATE
-        ).round(2)
-        merged_daily_product["寄样总成本"] = merged_daily_product["寄样支出"] + merged_daily_product["寄样IVA"]
+        if is_local_store:
+            merged_daily_product["正常订单IVA"] = 0
+            merged_daily_product["寄样IVA"] = 0
+            merged_daily_product["寄样总成本"] = merged_daily_product["寄样支出"]
+        else:
+            merged_daily_product["正常订单IVA"] = merged_daily_product["正常订单IVA"] * exchange_rate
+            merged_daily_product["寄样总成本"] = merged_daily_product["寄样支出"] + merged_daily_product["寄样IVA"]
         merged_daily_product["汇率后金额"] = (merged_daily_product["销售额"] * exchange_rate).round(2)
 
         for _, row in merged_daily_product.iterrows():
@@ -1105,14 +1333,23 @@ def run_report(store_config, config_df, exchange_rate):
     df_daily_summary = df_daily_summary.merge(df_order_count, on=["文件名", "日期"], how="left")
     df_daily_summary["订单数"] = df_daily_summary["订单数"].fillna(0).astype(int)
     df_daily_summary["每件商品成交费用"] = df_daily_summary["销量"] * MX_PER_ORDER_ITEM_FEE_MXN * exchange_rate
-    df_daily_summary["利润"] = (
-        df_daily_summary["汇率后金额"]
-        - df_daily_summary["产品成本"]
-        - df_daily_summary["物流成本"]
-        - df_daily_summary["正常订单IVA"]
-        - df_daily_summary["寄样总成本"]
-        - df_daily_summary["每件商品成交费用"]
-    )
+    if is_local_store:
+        df_daily_summary["利润"] = (
+            df_daily_summary["汇率后金额"]
+            - df_daily_summary["产品成本"]
+            - df_daily_summary["物流成本"]
+            - df_daily_summary["寄样支出"]
+            - df_daily_summary["每件商品成交费用"]
+        )
+    else:
+        df_daily_summary["利润"] = (
+            df_daily_summary["汇率后金额"]
+            - df_daily_summary["产品成本"]
+            - df_daily_summary["物流成本"]
+            - df_daily_summary["正常订单IVA"]
+            - df_daily_summary["寄样总成本"]
+            - df_daily_summary["每件商品成交费用"]
+        )
     df_daily_summary = df_daily_summary[[
         "文件名", "日期", "订单数", "销售额", "汇率后金额", "除运费外销售额", "产品成本", "物流成本", "正常订单IVA", "寄样支出", "寄样IVA", "寄样总成本", "每件商品成交费用", "利润", "销量", "寄样数"
     ]]
@@ -1183,8 +1420,13 @@ def run_report(store_config, config_df, exchange_rate):
     try:
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
         with pd.ExcelWriter(output_filename, engine="openpyxl") as writer:
+            display_rename_map = {"寄样支出": "样品支出"}
+            display_drop_cols = ["正常订单IVA", "寄样IVA", "除运费外销售额"] if is_local_store else []
             file_summary_sheet = "文件汇总"
-            df_file_summary_display = insert_blank_rows_between_files(df_product_profit_by_period)
+            df_file_summary_display = df_product_profit_by_period.rename(columns=display_rename_map)
+            if display_drop_cols:
+                df_file_summary_display = df_file_summary_display.drop(columns=display_drop_cols, errors="ignore")
+            df_file_summary_display = insert_blank_rows_between_files(df_file_summary_display)
             df_file_summary_display.to_excel(writer, sheet_name=file_summary_sheet, index=False)
             center_excel_sheet(writer, file_summary_sheet, len(df_file_summary_display) + 1, len(df_file_summary_display.columns))
 
@@ -1223,9 +1465,12 @@ def run_report(store_config, config_df, exchange_rate):
                 sheet_name = "周期对比"
                 max_cols = 0
                 for title, frame in period_comparison_frames:
-                    frame.to_excel(writer, sheet_name=sheet_name, startrow=startrow, index=False)
-                    max_cols = max(max_cols, len(frame.columns))
-                    startrow += len(frame) + 3
+                    frame_display = frame.rename(columns=display_rename_map)
+                    if display_drop_cols:
+                        frame_display = frame_display.drop(columns=display_drop_cols, errors="ignore")
+                    frame_display.to_excel(writer, sheet_name=sheet_name, startrow=startrow, index=False)
+                    max_cols = max(max_cols, len(frame_display.columns))
+                    startrow += len(frame_display) + 3
                 center_excel_sheet(writer, sheet_name, startrow, max_cols)
             else:
                 period_hint = pd.DataFrame([{"提示": "周期对比需要至少 2 个有效 CSV 文件"}])
@@ -1236,6 +1481,14 @@ def run_report(store_config, config_df, exchange_rate):
         if unmatched_skus:
             print(f"💡 [{display_name}] 提醒：以下 SKU ID 在配置表中未找到匹配项:")
             for sku in sorted(list(unmatched_skus)):
+                print(f"   - {sku}")
+        if missing_cost_skus:
+            print(f"💡 [{display_name}] 提醒：以下 SKU 在配置表中缺少产品成本，已按 0 处理:")
+            for sku in sorted(list(missing_cost_skus)):
+                print(f"   - {sku}")
+        if missing_weight_skus:
+            print(f"💡 [{display_name}] 提醒：以下 SKU 缺少实重/长宽高信息，已按 0 运费处理，请补飞书配置:")
+            for sku in sorted(list(missing_weight_skus)):
                 print(f"   - {sku}")
     except Exception as e:
         print(f"❌ [{display_name}] 保存失败: {e}")

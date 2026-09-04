@@ -3,7 +3,7 @@
 TikTok Shop daily report launcher.
 
 This is the packaging-friendly entry point for Windows/macOS users. It reads
-config/app_config.xlsx, then runs the enabled JP/VN/MX daily report jobs.
+config/app_config.xlsx, then runs the enabled JP/VN/data_MX daily report jobs.
 """
 
 import argparse

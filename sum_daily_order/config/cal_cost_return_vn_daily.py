@@ -73,7 +73,7 @@ FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 
 FEISHU_SHEET_TOKEN = os.getenv("FEISHU_SHEET_TOKEN_SEA") or os.getenv("FEISHU_SHEET_TOKEN") or ""
-FEISHU_RANGE_SKU = "A:G"
+FEISHU_RANGE_SKU = "A:Z"
 FEISHU_REQUIRED_SCOPE_HINT = "请在飞书开放平台给应用开通 sheets:spreadsheet:readonly 或 sheets:spreadsheet:read 权限，并重新发布/生效。"
 
 # -------- 越南固定汇率（1 越南盾兑人民币）--------
@@ -273,20 +273,6 @@ def get_cache_file_path(sheet_name):
 def get_config_dataframe(sheet_name, force_refresh=False):
     """获取指定 Sheet 的配置 DataFrame，优先飞书，失败则用本地缓存。"""
     cache_file = get_cache_file_path(sheet_name)
-    cache_valid = False
-    if os.path.exists(cache_file) and not force_refresh:
-        mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
-        if datetime.now() - mtime < timedelta(hours=CACHE_EXPIRY_HOURS):
-            cache_valid = True
-
-    if cache_valid and USE_CONFIG_CACHE_FIRST and not force_refresh:
-        try:
-            df = pd.read_csv(cache_file, dtype=str, encoding="utf-8-sig")
-            df = clean_config_dataframe(df)
-            print(f"   ✅ 使用本地缓存配置（Sheet: {sheet_name}）")
-            return df
-        except Exception as e:
-            print(f"   ⚠️ 缓存读取失败: {e}，尝试刷新")
 
     try:
         if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
