@@ -7,10 +7,6 @@
 - 墨西哥站日报：`sum_daily_order/config/cal_cost_return_mx_daily.py`
 - 打包友好的统一入口：`main.py`
 
-如果你是给同事看，先看这个更简单的说明：
-
-- [同事快速上手说明](docs/QUICK_START.md)
-
 ## 成本与利润口径说明
 
 报表里的“利润”“利润率”不是财务净利润，只能理解为“预估毛利”或“扣除已配置成本后的余额”。
