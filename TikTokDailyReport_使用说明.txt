@@ -15,7 +15,7 @@ TikTokDailyReport 使用说明
 
 把订单 CSV 放到对应目录：
 
-```text
+```
 data\data_JP\local - 日本本土店
 data\data_JP\cross-border  - 日本跨境店
 data\data_JP\direct_old - 日本直邮一店
