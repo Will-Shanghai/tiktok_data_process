@@ -1,30 +1,30 @@
 TikTokDailyReport 使用说明
 ==========================
 
-这是给不写代码的同事看的，按下面做就行。
-
 1. 先装什么
 
-- Windows 同事：直接双击 `TikTokDailyReport.exe`
+- Windows 同事：下载后先解压，再双击里面的 TikTokDailyReport.exe 运行
 - 不需要安装 Python
 - 只有自己打包的人才需要 Python 3.11
 
 2. 文件怎么放
 
-先把压缩包解压到一个固定文件夹。
+运行前，请先把 `.env` 放到 `config/.env`。
+
+这个文件现在必须有，因为程序要先读飞书配置。
 
 把订单 CSV 放到对应目录：
 
 ```text
-data\data_JP\local
-data\data_JP\cross-border
-data\data_JP\direct_old
-data\data_JP\direct_new
-data\data_VN\local
-data\data_VN\cross_border
-data\data_MX\local
-data\data_MX\direct_old
-data\data_MX\direct_new
+data\data_JP\local - 日本本土店
+data\data_JP\cross-border  - 日本跨境店
+data\data_JP\direct_old - 日本直邮一店
+data\data_JP\direct_new - 日本直邮二店
+data\data_VN\local - 越南本土店
+data\data_VN\cross_border - 越南跨境店
+data\data_MX\local - 墨西哥本土店
+data\data_MX\direct_old - 墨西哥直邮一店
+data\data_MX\direct_new - 墨西哥直邮二店
 ```
 
 文件放错目录，程序就会按错店铺算。
@@ -48,7 +48,7 @@ data\data_MX\direct_new
 5. 常见问题
 
 - 没有结果：先看 `data` 里有没有 CSV，再看目录放对没有
-- 找不到配置：看 `config/app_config.xlsx`、`config/cache`、`config/.env`
+- 找不到配置：先看 `config/.env` 在不在，再看 `config/app_config.xlsx` 和 `config/cache`
 - 某一列不存在：重新从 TikTok 后台导出 CSV，不要手改表头
 - 文件夹为空：这个目录里没有 CSV，放进去再跑
 
