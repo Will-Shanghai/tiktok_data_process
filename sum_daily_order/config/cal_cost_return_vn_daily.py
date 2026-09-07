@@ -642,6 +642,22 @@ def build_product_quantity_by_period(product_quantity_records):
     matrix.loc["汇总"] = matrix.sum(axis=0)
     return matrix
 
+def merge_sales_without_shipping_columns(df, col_name):
+    """合并正常订单和样品订单各自产生的除运费外销售额列。"""
+    left_col = f"{col_name}_x"
+    right_col = f"{col_name}_y"
+    if left_col in df.columns or right_col in df.columns:
+        left_values = df[left_col] if left_col in df.columns else 0
+        right_values = df[right_col] if right_col in df.columns else 0
+        df[col_name] = (
+            pd.to_numeric(left_values, errors="coerce").fillna(0)
+            + pd.to_numeric(right_values, errors="coerce").fillna(0)
+        )
+        df.drop(columns=[col for col in [left_col, right_col] if col in df.columns], inplace=True)
+    elif col_name not in df.columns:
+        df[col_name] = 0
+    return df
+
 
 def build_daily_product_quantity_matrix(df_daily_product):
     """按日期横向展开每个产品的销量，用于 Daily Product Detail。"""
@@ -914,6 +930,7 @@ def run_report(store_config, config_df, exchange_rate):
             on=["日期", "Product Category", "Mapped Name"],
             how="outer",
         )
+        merged_daily_product = merge_sales_without_shipping_columns(merged_daily_product, p_display_col)
         for col in ["销量", "销售额", p_display_col, "产品成本", "物流成本", "寄样数", "寄样支出"]:
             if col in merged_daily_product.columns:
                 merged_daily_product[col] = pd.to_numeric(merged_daily_product[col], errors="coerce").fillna(0)
