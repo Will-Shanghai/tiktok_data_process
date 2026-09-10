@@ -273,6 +273,8 @@ def clean_config_dataframe(df):
     if PRODUCT_CATEGORY_COLUMN in df.columns:
         df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].astype(str).str.strip()
         df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].replace({"": pd.NA, "nan": pd.NA})
+        # 飞书合并单元格只会返回左上角的值，SKU 行需要继承上一行产品大类。
+        df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].ffill()
         if PRODUCT_NAME_COLUMN in df.columns:
             df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].fillna(df[PRODUCT_NAME_COLUMN])
 

@@ -261,6 +261,7 @@ def clean_config_dataframe(df):
             df[col] = df[col].astype(str).str.strip()
     if "中文简称" in df.columns:
         df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].replace({"": pd.NA, "nan": pd.NA})
+        df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].ffill()
         df[PRODUCT_CATEGORY_COLUMN] = df[PRODUCT_CATEGORY_COLUMN].fillna(df["中文简称"])
     return df
 
