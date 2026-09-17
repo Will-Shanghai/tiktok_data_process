@@ -50,7 +50,7 @@ sum_daily_order/
 ├── data/
 │   ├── data_JP/
 │   │   ├── local/
-│   │   ├── cross-border/
+│   │   ├── cross_border/
 │   │   ├── direct_old/
 │   │   └── direct_new/
 │   └── data_VN/
@@ -64,24 +64,24 @@ sum_daily_order/
 Windows 打包后，建议给同事的目录结构是：
 
 ```text
-TikTokDailyReport/
-├── TikTokDailyReport_v<版本号>.exe
-├── config/
-│   ├── app_config.xlsx
-│   ├── .env                     # 需要在线读取飞书时才放
-│   └── cache/
-├── data/
-│   ├── data_JP/
-│   │   ├── local/
-│   │   ├── cross-border/
-│   │   ├── direct_old/
-│   │   └── direct_new/
-│   └── data_VN/
-│       ├── local/
-│       └── cross_border/
-│   └── data_MX/
-│       └── direct_old/
-└── result/
+TikTokShopDataTool/
+├── TikTokShopDataTool_v<版本号>.exe
+├── sum_daily_order/
+│   ├── config/
+│   │   ├── app_config.xlsx
+│   │   ├── .env                 # 需要在线读取飞书时才放
+│   │   └── cache/
+│   ├── data/
+│   │   ├── data_JP/
+│   │   ├── data_VN/
+│   │   └── data_MX/
+│   └── result/
+└── sum_daily_conversion/
+    ├── config/
+    │   ├── config.json
+    │   └── product_sheet_mapping.csv
+    ├── data/
+    └── result/
 ```
 
 ## app_config.xlsx
@@ -95,7 +95,7 @@ sum_daily_order/config/app_config.xlsx
 打包后放在：
 
 ```text
-TikTokDailyReport/config/app_config.xlsx
+TikTokShopDataTool/sum_daily_order/config/app_config.xlsx
 ```
 
 `Stores` Sheet 字段说明：
@@ -205,18 +205,18 @@ sum_daily_order/data/data_VN/cross_border/
 程序会优先尝试使用本地缓存：
 
 ```text
-config/cache/
+sum_daily_order/config/cache/
 ```
 
 GitHub Actions 自动打包时，默认只负责生成 exe 和交付包，不会把真实 `.env` 打进去：
 
 ```text
-config/cache/
+sum_daily_order/config/cache/
 ```
 
-所以普通同事下载 Release 包后，只要把 `.env` 放到 `config/.env`，就可以在线读取飞书配置。
+所以普通同事下载 Release 包后，只要把 `.env` 放到 `sum_daily_order/config/.env`，就可以在线读取飞书配置。
 
-如果你自己需要在本机运行时在线刷新飞书配置，请在 `config/.env` 中配置飞书应用凭证：
+如果你自己需要在本机运行时在线刷新飞书配置，请在 `sum_daily_order/config/.env` 中配置飞书应用凭证：
 
 ```text
 FEISHU_APP_ID=你的飞书应用ID
@@ -243,14 +243,14 @@ VIETNAM_EXCHANGE_RATE=0.0002575
 MEXICO_EXCHANGE_RATE=0.000000
 ```
 
-如果没有 `.env`，但 `config/cache/` 中已有对应配置缓存，程序仍可以运行。
+如果没有 `.env`，但 `sum_daily_order/config/cache/` 中已有对应配置缓存，程序仍可以运行。
 
 `.env` 是密钥文件，不要提交到 Git，不要写进代码，不要放进公开 Release，也不要发到公开群。Release 包默认不带真实 `.env`。
 
 运行时规则：
 
-- 有 `config/.env` 时，程序会优先从飞书刷新配置，并更新本地 `config/cache/`。
-- 没有 `config/.env` 时，程序会使用 `config/cache/` 离线运行。
+- 有 `sum_daily_order/config/.env` 时，程序会优先从飞书刷新配置，并更新本地 `sum_daily_order/config/cache/`。
+- 没有 `sum_daily_order/config/.env` 时，程序会使用 `sum_daily_order/config/cache/` 离线运行。
 
 ## Windows 打包
 
@@ -275,9 +275,9 @@ VERSION
 - 这里写 `1.1.0` 即可，不需要自己手动加 `v`
 - 程序运行时会显示成 `v1.1.0`
 - GitHub Actions 打包时会自动生成：
-  - `TikTokDailyReport_v1.1.0.exe`
-  - `TikTokDailyReport_v1.1.0_windows.zip`
-  - GitHub Release 附件 `TikTokDailyReport_v1.1.0_windows.zip`
+  - `TikTokShopDataTool_v1.1.0.exe`
+  - `TikTokShopDataTool_v1.1.0_windows.zip`
+  - GitHub Release 附件 `TikTokShopDataTool_v1.1.0_windows.zip`
 
 如果你要发新版本，最简单的方式就是先改这个文件，再提交代码。
 
@@ -313,17 +313,17 @@ VERSION
 - GitHub Release 的 `Assets`
 
 交付包里只保留日报工具本身需要的文件，不再附带广告/商品卡/订单分析等旧模块目录。
-交付包会包含 `config/.env.example`，但不会包含真实 `.env` 密钥文件。
+交付包会包含 `sum_daily_order/config/.env.example`，但不会包含真实 `.env` 密钥文件。
 
 建议平时给同事发飞书通知里的 Release 链接。打开 Release 页面后：
 
 1. 找到页面下方的 `Assets`
-2. 下载 `TikTokDailyReport_v<版本号>_windows.zip`
+2. 下载 `TikTokShopDataTool_v<版本号>_windows.zip`
 3. 不要下载 `Source code (zip)` 或 `Source code (tar.gz)`
 
 `Source code` 是 GitHub 自动生成的源码包，不是给同事使用的工具包。
 
-如果你希望在线读取飞书配置，请把 `.env` 放到 `config/.env`，内容格式参考 `config/.env.example`。
+如果你希望在线读取飞书配置，请把 `.env` 放到 `sum_daily_order/config/.env`，内容格式参考 `sum_daily_order/config/.env.example`。
 
 ### 飞书机器人说明
 
@@ -334,7 +334,7 @@ VERSION
 FEISHU_BOT_WEBHOOK
 ```
 
-如果你希望同事本地运行时在线读取飞书配置，就把飞书应用密钥放在本地的 `config/.env`，不要提交到 Git。
+如果你希望同事本地运行时在线读取飞书配置，就把飞书应用密钥放在本地的 `sum_daily_order/config/.env`，不要提交到 Git。
 
 ### 手动发版
 
@@ -388,7 +388,7 @@ py -3.11 --version
 Python 3.11.9
 ```
 
-注意：只有“打包 exe 的电脑”需要安装 Python。最终拿到 `TikTokDailyReport_v<版本号>.exe` 的普通同事不需要安装 Python。
+注意：只有“打包 exe 的电脑”需要安装 Python。最终拿到 `TikTokShopDataTool_v<版本号>.exe` 的普通同事不需要安装 Python。
 
 下面说的“项目文件夹根目录”，指的是你解压/拉取代码后的这个文件夹，例如：
 
@@ -410,29 +410,28 @@ cd /d C:\Users\MAC\Desktop\tiktok_data_process
 py -3.11 -m venv .venv
 .venv\Scripts\activate
 pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
-pyinstaller --onefile --name TikTokDailyReport_v<版本号> main.py
+pyinstaller --onefile --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 打包完成后，exe 通常在：
 
 ```text
-dist/TikTokDailyReport_v<版本号>.exe
+dist/TikTokShopDataTool_v<版本号>.exe
 ```
 
 然后在 `dist` 里补齐外部目录：
 
 ```text
 dist/
-├── TikTokDailyReport_v<版本号>.exe
-├── config/
-├── data/
-└── result/
+├── TikTokShopDataTool_v<版本号>.exe
+├── sum_daily_order/
+└── sum_daily_conversion/
 ```
 
 程序第一次启动时，如果发现没有：
 
 ```text
-dist/config/app_config.xlsx
+dist/sum_daily_order/config/app_config.xlsx
 ```
 
 会自动生成一个默认配置文件。所以 `app_config.xlsx` 不一定必须手动复制，但建议你确认里面的 `enabled` 和店铺目录是否符合实际。
@@ -440,15 +439,15 @@ dist/config/app_config.xlsx
 GitHub Actions 自动打包出来的 Release 包会自带：
 
 ```text
-config/.env.example
+sum_daily_order/config/.env.example
 ```
 
-普通同事如果要在线刷新飞书配置，需要自己准备 `config/.env`。
+普通同事如果要在线刷新飞书配置，需要自己准备 `sum_daily_order/config/.env`。
 
 如果你自己希望本机或某个内部版本每次运行都能在线读取飞书配置，也可以单独准备：
 
 ```text
-config/.env
+sum_daily_order/config/.env
 ```
 
 内容格式：
@@ -463,25 +462,25 @@ VIETNAM_EXCHANGE_RATE=0.0002575
 MEXICO_EXCHANGE_RATE=0.000000
 ```
 
-注意：`.env` 里是飞书应用密钥，不建议放进 Release 包，也不要提交到 Git。普通同事如果没有 `.env`，就只能依赖 Release 包里已有的 `config/cache/`。
+注意：`.env` 里是飞书应用密钥，不建议放进 Release 包，也不要提交到 Git。普通同事如果没有 `.env`，就只能依赖 Release 包里已有的 `sum_daily_order/config/cache/`。
 
 注意：`app_config.xlsx` 只是“运行哪些国家/店铺”的配置；SKU 成本、物流成本、寄样成本、产品大类来自飞书配置表或本地缓存。  
-如果 exe 目录下没有 `config/.env`，就必须准备：
+如果 exe 目录下没有 `sum_daily_order/config/.env`，就必须准备：
 
 ```text
-dist/config/cache/
+dist/sum_daily_order/config/cache/
 ```
 
 否则程序会提示无法读取 SKU 成本配置。
 
-订单 CSV 不建议随 exe 打包，日常使用时直接放到 `dist/data/` 下对应店铺目录。
+订单 CSV 不建议随 exe 打包，日常使用时直接放到 `dist/sum_daily_order/data/` 下对应店铺目录。
 
 最终同事只需要：
 
-1. 把订单 CSV 放进对应 `data` 子目录。
-2. 双击 `TikTokDailyReport_v<版本号>.exe`。
+1. 把订单 CSV 放进对应 `sum_daily_order/data` 子目录。
+2. 双击 `TikTokShopDataTool_v<版本号>.exe`。
 3. 按菜单选择日本、越南或全部。
-4. 到 `result` 目录查看生成的 Excel。
+4. 到 `sum_daily_order/result` 目录查看生成的 Excel。
 
 ## macOS 快速部署
 
@@ -498,7 +497,7 @@ python main.py --site all
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --name TikTokDailyReport_v<版本号> main.py
+pyinstaller --onefile --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用。
@@ -510,13 +509,13 @@ macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用�
 新版程序会自动生成默认配置。如果你仍看到这个提示，说明你运行的是旧 exe，请重新执行：
 
 ```bat
-pyinstaller --onefile --name TikTokDailyReport_v<版本号> main.py
+pyinstaller --onefile --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 然后重新打开：
 
 ```text
-dist/TikTokDailyReport_v<版本号>.exe
+dist/TikTokShopDataTool_v<版本号>.exe
 ```
 
 ### 提示某个目录下未找到文件
@@ -524,8 +523,8 @@ dist/TikTokDailyReport_v<版本号>.exe
 确认订单 CSV 放在对应店铺目录。例如日本直邮老店和新店需要分开放：
 
 ```text
-data/data_JP/direct_old/
-data/data_JP/direct_new/
+sum_daily_order/data/data_JP/direct_old/
+sum_daily_order/data/data_JP/direct_new/
 ```
 
 ### 提示无法从飞书刷新配置
@@ -533,27 +532,27 @@ data/data_JP/direct_new/
 如果你希望在线读取飞书，请检查：
 
 ```text
-config/.env
+sum_daily_order/config/.env
 ```
 
-如果只是给普通同事使用，建议提前准备好 `config/.env`，让程序在线读取飞书。
+如果只是给普通同事使用，建议提前准备好 `sum_daily_order/config/.env`，让程序在线读取飞书。
 
 打包后对应路径是：
 
 ```text
-dist/config/.env
+dist/sum_daily_order/config/.env
 ```
 
 也就是把源码里的：
 
 ```text
-config/.env
+sum_daily_order/config/.env
 ```
 
 整个复制到：
 
 ```text
-dist/config/.env
+dist/sum_daily_order/config/.env
 ```
 
 ### pip install 最后出现一大段 Traceback
@@ -584,7 +583,7 @@ WARNING: Library not found: could not resolve 'VERSION.dll'
 这类 warning 不一定代表失败。只要最后生成了：
 
 ```text
-dist/TikTokDailyReport_v1.1.0.exe
+dist/TikTokShopDataTool_v1.1.0.exe
 ```
 
 并且双击能启动，就可以继续测试。真正需要处理的是运行 exe 后出现的业务报错，例如配置文件、数据目录、飞书缓存缺失等。

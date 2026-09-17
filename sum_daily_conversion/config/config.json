@@ -1,0 +1,16 @@
+{
+  "default_year": 2026,
+  "date_output_format": "mmdd",
+  "output_mode": "local_excel",
+  "data_dir": "data",
+  "mapping_file": "config/product_sheet_mapping.csv",
+  "output_dir": "result",
+  "log_dir": "result/logs",
+  "gmv_max_rules": {
+    "target_roi": 4.0,
+    "base_test_cost": 5,
+    "impression_threshold": 3000,
+    "click_threshold": 5,
+    "no_order_stop_cost_threshold": 10
+  }
+}

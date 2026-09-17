@@ -47,7 +47,7 @@ release/
 config_cache.pkl
 
 # 忽略结果文件夹（如果需要）
-result/
+sum_daily_conversion/result/
 
 # 忽略本地订单数据
 sum_daily_order/data/

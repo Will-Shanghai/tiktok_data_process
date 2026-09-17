@@ -118,19 +118,39 @@ DEFAULT_STORES = [
 
 
 def get_runtime_root():
-    """Return the folder that contains config/data/result for this run."""
+    """Return the sum_daily_order root for source runs and packaged runs."""
     env_root = os.getenv("TIKTOK_REPORT_ROOT")
     if env_root:
         return Path(env_root).resolve()
 
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
+        exe_root = Path(sys.executable).resolve().parent
+        sum_daily_root = exe_root / "sum_daily_order"
+        return sum_daily_root if sum_daily_root.is_dir() else exe_root
 
     source_root = Path(__file__).resolve().parent
     sum_daily_root = source_root / "sum_daily_order"
     if (sum_daily_root / "config").is_dir() and (sum_daily_root / "data").is_dir():
         return sum_daily_root
     return source_root
+
+
+def get_project_runtime_root():
+    """Return the root used by project-level tools such as daily conversion."""
+    env_root = os.getenv("TIKTOK_PROJECT_ROOT")
+    if env_root:
+        return Path(env_root).resolve()
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def get_conversion_runtime_root():
+    """Return the sum_daily_conversion root for source runs and packaged runs."""
+    env_root = os.getenv("TIKTOK_CONVERSION_ROOT")
+    if env_root:
+        return Path(env_root).resolve()
+    return get_project_runtime_root() / "sum_daily_conversion"
 
 
 APP_ROOT = get_runtime_root()
@@ -238,6 +258,15 @@ def choose_site():
     return {"1": "JP", "2": "VN", "3": "MX", "4": "all"}.get(choice, "")
 
 
+def choose_task():
+    print("\n请选择要运行的功能：")
+    print("1. 订单成本日报")
+    print("2. 商品每日转化统计")
+    print("3. 全部运行")
+    choice = input("请输入数字后回车: ").strip()
+    return {"1": "order", "2": "conversion", "3": "all"}.get(choice, "")
+
+
 def split_stores_by_site(stores):
     grouped = {"JP": [], "VN": [], "MX": []}
     for store in stores:
@@ -273,8 +302,8 @@ def check_config_sources(stores):
         "当前没有配置飞书凭证，也缺少本地配置缓存，无法读取 SKU 成本配置。\n"
         f"缺少缓存的 Sheet:\n{missing_text}\n\n"
         "解决办法二选一：\n"
-        "1. 把源码里的 sum_daily_order/config/cache 文件夹复制到 exe 同级的 config/cache；\n"
-        "2. 在 exe 同级的 config/.env 中配置对应国家的飞书 App ID / App Secret。"
+        "1. 把源码里的 sum_daily_order/config/cache 文件夹复制到 exe 同级的 sum_daily_order/config/cache；\n"
+        "2. 在 exe 同级的 sum_daily_order/config/.env 中配置对应国家的飞书 App ID / App Secret。"
     )
 
 
@@ -330,14 +359,34 @@ def run(site):
             print("⚠️ app_config.xlsx 中没有启用的墨西哥直邮店铺，已跳过。")
 
 
+def run_conversion(dry_run=False):
+    conversion_root = get_conversion_runtime_root()
+    for folder in ["config", "data", "result", "result/logs"]:
+        (conversion_root / folder).mkdir(parents=True, exist_ok=True)
+
+    os.environ["TIKTOK_CONVERSION_ROOT"] = str(conversion_root)
+    os.environ["TIKTOK_REPORT_VERSION"] = APP_VERSION
+
+    conversion_config = conversion_root / "config" / "config.json"
+    conversion_env = conversion_root / "config" / ".env"
+    if not conversion_config.exists():
+        raise FileNotFoundError(f"找不到转化统计配置文件: {conversion_config}")
+
+    from sum_daily_conversion.config.cal_product_daily_conversion import run_daily_conversion
+
+    return run_daily_conversion(conversion_config, conversion_env, dry_run=dry_run)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="TikTok Shop daily report launcher")
+    parser = argparse.ArgumentParser(description="TikTok Shop data tool launcher")
     parser.add_argument("--site", choices=["JP", "VN", "MX", "all"], help="直接运行指定站点")
+    parser.add_argument("--task", choices=["order", "conversion", "all"], help="直接运行指定功能")
+    parser.add_argument("--dry-run", action="store_true", help="转化统计只解析预览，不写入飞书")
     parser.add_argument("--list", action="store_true", help="列出 app_config.xlsx 中启用的店铺")
     args = parser.parse_args()
 
     print("=" * 60)
-    print(f"TikTok Shop 日报生成工具 {APP_VERSION}")
+    print(f"TikTok Shop 数据工具 {APP_VERSION}")
     print("=" * 60)
     print(f"工具目录: {APP_ROOT}")
     print(f"配置文件: {CONFIG_PATH}")
@@ -352,11 +401,20 @@ def main():
                 print(f"- {store['country_name']}_{store['store_name']} ({store['country_code']}/{store['store_key']})")
             return
 
-        site = args.site or choose_site()
-        if site not in {"JP", "VN", "MX", "all"}:
-            print("未选择有效站点，程序结束。")
+        task = args.task or ("order" if args.site else choose_task())
+        if task not in {"order", "conversion", "all"}:
+            print("未选择有效功能，程序结束。")
             return
-        run(site)
+
+        if task in {"order", "all"}:
+            site = args.site or choose_site()
+            if site not in {"JP", "VN", "MX", "all"}:
+                print("未选择有效站点，已跳过订单成本日报。")
+            else:
+                run(site)
+
+        if task in {"conversion", "all"}:
+            run_conversion(dry_run=args.dry_run)
     except Exception as exc:
         print(f"\n❌ 程序运行失败: {exc}")
     finally:

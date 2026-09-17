@@ -1437,8 +1437,13 @@ def run_report(store_config, config_df, exchange_rate):
             center_excel_sheet(writer, detail_sheet, len(df_daily_product_quantity_matrix) + 1, len(df_daily_product_quantity_matrix.columns))
 
             sku_detail_sheet = "SKU明细"
-            df_daily_sku_quantity_matrix.to_excel(writer, sheet_name=sku_detail_sheet, index=False)
-            center_excel_sheet(writer, sku_detail_sheet, len(df_daily_sku_quantity_matrix) + 1, len(df_daily_sku_quantity_matrix.columns))
+            df_sku_profit_display = insert_blank_rows_between_files(df_sku_profit_by_period)
+            df_sku_profit_display.to_excel(writer, sheet_name=sku_detail_sheet, index=False)
+            sku_startrow = len(df_sku_profit_display) + 3
+            df_daily_sku_quantity_matrix.to_excel(writer, sheet_name=sku_detail_sheet, startrow=sku_startrow, index=False)
+            sku_rows = sku_startrow + len(df_daily_sku_quantity_matrix) + 1
+            sku_cols = max(len(df_sku_profit_display.columns), len(df_daily_sku_quantity_matrix.columns))
+            center_excel_sheet(writer, sku_detail_sheet, sku_rows, sku_cols)
 
             quantity_sheet = "产品销量矩阵"
             df_product_quantity_by_period.to_excel(writer, sheet_name=quantity_sheet, index=True)

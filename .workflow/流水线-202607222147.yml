@@ -1,6 +1,6 @@
 version: "1.0"
 name: tiktok-daily-report-ci
-displayName: TikTok Daily Report CI
+displayName: TikTok Shop Data Tool CI
 stages:
 - name: build
   displayName: 校验与打包
@@ -18,13 +18,22 @@ stages:
     - python3 -m py_compile main.py
     - python3 -m py_compile sum_daily_order/config/cal_cost_return_jp_daily.py
     - python3 -m py_compile sum_daily_order/config/cal_cost_return_vn_daily.py
-    - pyinstaller --onefile --name TikTokDailyReport_linux main.py
-    - mkdir -p release/config
+    - python3 -m py_compile sum_daily_order/config/cal_cost_return_mx_daily.py
+    - python3 -m py_compile sum_daily_conversion/config/cal_product_daily_conversion.py
+    - pyinstaller --onefile --name TikTokShopDataTool_linux --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
     - mkdir -p release/dist
+    - mkdir -p release/sum_daily_order/config/cache
+    - mkdir -p release/sum_daily_order/data
+    - mkdir -p release/sum_daily_order/result
+    - mkdir -p release/sum_daily_conversion/config
+    - mkdir -p release/sum_daily_conversion/data
+    - mkdir -p release/sum_daily_conversion/result/logs
     - cp -r dist/* release/dist/ || true
     - cp README.md release/ || true
-    - cp TikTokDailyReport_使用说明.txt release/ || true
-    - cp sum_daily_order/config/app_config.xlsx release/config/ || true
+    - cp TikTokShopDataTool_使用说明.txt release/ || true
+    - cp sum_daily_order/config/app_config.xlsx release/sum_daily_order/config/ || true
+    - cp sum_daily_conversion/config/config.json release/sum_daily_conversion/config/ || true
+    - cp sum_daily_conversion/config/product_sheet_mapping.csv release/sum_daily_conversion/config/ || true
     artifacts:
     - name: BUILD_ARTIFACT
       path:
