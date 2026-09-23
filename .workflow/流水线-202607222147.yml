@@ -20,7 +20,7 @@ stages:
     - python3 -m py_compile sum_daily_order/config/cal_cost_return_vn_daily.py
     - python3 -m py_compile sum_daily_order/config/cal_cost_return_mx_daily.py
     - python3 -m py_compile sum_daily_conversion/config/cal_product_daily_conversion.py
-    - pyinstaller --onefile --name TikTokShopDataTool_linux --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+    - pyinstaller --onedir --name TikTokShopDataTool_linux --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
     - mkdir -p release/dist
     - mkdir -p release/sum_daily_order/config/cache
     - mkdir -p release/sum_daily_order/data

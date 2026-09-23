@@ -81,7 +81,7 @@ jobs:
       - name: Build EXE
         shell: pwsh
         run: |
-          pyinstaller --clean --onefile --name "${{ steps.version.outputs.exe_base }}" --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+          pyinstaller --clean --onedir --name "${{ steps.version.outputs.exe_base }}" --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 
       - name: Prepare release folder
         shell: pwsh
@@ -110,7 +110,7 @@ jobs:
             throw "缺少 TikTokShopDataTool_使用说明.txt。请确认该文件已提交到 Git 仓库。"
           }
 
-          Copy-Item "dist/${{ steps.version.outputs.exe_file }}" "$root/"
+          Copy-Item "dist/${{ steps.version.outputs.exe_base }}" "$root/" -Recurse -Force
           Copy-Item "TikTokShopDataTool_使用说明.txt" "$root/"
           Copy-Item "VERSION" "$root/"
           Copy-Item "sum_daily_order/config/app_config.xlsx" "$root/sum_daily_order/config/"

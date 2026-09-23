@@ -410,7 +410,7 @@ cd /d C:\Users\MAC\Desktop\tiktok_data_process
 py -3.11 -m venv .venv
 .venv\Scripts\activate
 pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
-pyinstaller --onefile --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+pyinstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 打包完成后，exe 通常在：
@@ -423,9 +423,11 @@ dist/TikTokShopDataTool_v<版本号>.exe
 
 ```text
 dist/
-├── TikTokShopDataTool_v<版本号>.exe
-├── sum_daily_order/
-└── sum_daily_conversion/
+└── TikTokShopDataTool_v<版本号>/
+    ├── TikTokShopDataTool_v<版本号>.exe
+    ├── _internal/
+    ├── sum_daily_order/
+    └── sum_daily_conversion/
 ```
 
 程序第一次启动时，如果发现没有：
@@ -497,7 +499,7 @@ python main.py --site all
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+pyinstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用。
@@ -509,7 +511,7 @@ macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用�
 新版程序会自动生成默认配置。如果你仍看到这个提示，说明你运行的是旧 exe，请重新执行：
 
 ```bat
-pyinstaller --onefile --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+pyinstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 然后重新打开：

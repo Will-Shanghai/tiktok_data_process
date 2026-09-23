@@ -257,10 +257,10 @@ GitHub Actions 文件：
 - `TikTokShopDataTool_v<版本号>.exe`
 - `TikTokShopDataTool_v<版本号>_windows.zip`
 
-手动打包命令：
+手动打包命令（现在使用 `onedir`，不要只复制单个 EXE）：
 
 ```bash
-pyinstaller --clean --onefile --name TikTokShopDataTool_v1.1.0 --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+pyinstaller --clean --onedir --name TikTokShopDataTool_v1.1.0 --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 打包后目标结构：
@@ -320,4 +320,3 @@ python main.py --list
 - 转化统计能运行到 `sum_daily_conversion` 目录。
 - 转化统计修复前 0 条（映射未匹配，非路径错误）；修复后 dry-run 输出 32 条，真实模式能写出 `result/商品每日转化统计_每天转化数据.xlsx`。
 - 分店铺目录模式回归测试同样通过（16 条，命中方式为「精确(店铺+商品ID)」）。
-
