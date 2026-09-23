@@ -1,270 +1,280 @@
-# TikTok Daily Report Skill
+---
+name: tiktok-data-process
+description: Maintain and debug the TikTokShopDataTool project in /Users/macbook/Documents/Projects/tiktok_data_process, including order daily reports, product daily conversion, Feishu config, and Windows EXE packaging.
+---
 
-## Purpose
+# TikTokShopDataTool Skill
 
-Use this skill when working on the TikTok Shop daily order report tool in:
+Use this skill when working in:
 
-- `/Users/macbook/Documents/Projects/tiktok_data_process`
+```text
+/Users/macbook/Documents/Projects/tiktok_data_process
+```
 
-This skill is for maintaining, extending, debugging, or packaging the daily report workflow used for Japan and Vietnam TikTok Shop order-cost reporting.
+This project is now a multi-function TikTok Shop data tool, not only a daily report tool.
 
-## When To Use
+## Current Entry Point
 
-Use this skill when the request is about any of the following:
+The maintained entry point is:
 
-- JP / VN daily order cost report scripts
-- `main.py` unified launcher
-- `sum_daily_order/config/app_config.xlsx`
-- report sheet structure such as `Daily Summary`, `Daily Product Detail`, `SKU Detail`
-- cost logic: product cost, logistics cost, sample cost
-- multi-file period comparison
-- Windows `exe` packaging and teammate delivery
-- folder placement for store CSV files
+```text
+main.py
+```
 
-Do not use this skill for:
+The launcher asks the user to choose:
 
-- ad-report scripts under `cal_ads_data`
-- product-card scripts under `cal_product_data`
-- click-order scripts under `click_order_data`
-- unrelated experimental scaffolds unless the user explicitly asks
+- `1` order cost daily report
+- `2` product daily conversion
+- `3` all
 
-## Current Project Boundary
+If the user chooses order daily reports, it then asks for site: JP, VN, MX, or all.
 
-Current maintained entrypoint:
+## Module Boundaries
 
-- `main.py`
-
-Current maintained country scripts:
-
-- `sum_daily_order/config/cal_cost_return_jp_daily.py`
-- `sum_daily_order/config/cal_cost_return_vn_daily.py`
-
-Current support status:
-
-- JP: local, cross-border, direct
-- VN: local, cross_border
-- MX: directories and config rows are reserved, but the daily script is not fully connected yet
-
-Important:
-
-- Do not assume older `app.py`, `tiktok_data_tool/`, or `docs/TOOL_USAGE.md` are the primary runtime path
-- Prefer the current `main.py` based workflow unless the user explicitly wants to revive the old structure
-
-## Runtime Layout
-
-Source mode:
+Keep the two modules separate:
 
 ```text
 sum_daily_order/
 ├── config/
-│   ├── app_config.xlsx
-│   └── cache/
 ├── data/
-│   ├── data_JP/
-│   ├── data_VN/
-│   └── data_MX/
 └── result/
-```
 
-Packaged mode:
-
-```text
-TikTokDailyReport/
-├── TikTokDailyReport_v1.1.0.exe
+sum_daily_conversion/
 ├── config/
 ├── data/
 └── result/
 ```
 
-The runtime root is:
+Do not put business config back into a root-level `config/`.
 
-- source mode: `sum_daily_order/`
-- packaged mode: the folder that contains the `exe`
+Do not put order `config/data/result` beside the EXE root. In packaged mode they belong under `sum_daily_order/`.
 
-The code already supports this with `TIKTOK_REPORT_ROOT` and runtime root detection.
+## Order Daily Reports
 
-## Core Business Rules
+Main scripts:
 
-### Date Rule
+- `sum_daily_order/config/cal_cost_return_jp_daily.py`
+- `sum_daily_order/config/cal_cost_return_vn_daily.py`
+- `sum_daily_order/config/cal_cost_return_mx_daily.py`
 
-- Daily grouping is based on `Paid Time`
-- Orders without a valid paid time are usually excluded from paid-order summaries
+Store config:
 
-### Store Folder Rule
+- `sum_daily_order/config/app_config.xlsx`
 
-CSV files must be placed in the correct store directory.
+Feishu/cache config:
 
-Examples:
+- live Feishu via `sum_daily_order/config/.env`
+- cached config under `sum_daily_order/config/cache/`
 
-- JP local: `data/data_JP/local`
-- JP cross-border: `data/data_JP/cross-border`
-- JP direct: `data/data_JP/direct`
-- VN local: `data/data_VN/local`
-- VN cross-border: `data/data_VN/cross_border`
+Supported stores:
 
-Wrong folder placement causes wrong cost rules to be applied.
+- JP: local, cross_border, direct_old, direct_new
+- VN: local, cross_border
+- MX: local, direct_old, direct_new
 
-### Product Mapping Rule
+Important rules:
 
-- Product-level reporting uses `产品大类`
-- SKU / variant-level detail is preserved separately
-- Name mapping must follow the actual business naming used in the Feishu config
+- The display name is now `除运费外销售额`, not `P列折后价`.
+- `除运费外销售额 = SKU Platform Discount + SKU Subtotal After Discount`.
+- Feishu merged cells in `产品大类` must be forward-filled after reading config.
+- Product-level summaries use `产品大类`; SKU-level details keep variant names.
+- Profits are estimated gross margin, not final financial profit.
 
-### Cost Rule
+Mexico-specific rules:
 
-- Product cost is quantity-based
-- Logistics cost is order-based
-- Sample cost is sample-quantity-based
+- MX local store has no normal-order IVA and no sample IVA.
+- MX local sales should exclude `Original Shipping Fee`.
+- MX local logistics = `头程物流成本(元) + 尾程物流成本(元)`.
+- MX direct uses direct-mail weight/logistics rules and IVA conversion.
+- If MX direct lacks real weight or dimensions, logistics cost should be 0 and a warning should be printed.
 
-If sample cost from config is blank or unreadable because of formula evaluation, treat:
+Japan direct rules:
 
-- `寄样成本(元) = 产品成本(元) + 物流成本(元)`
+- JP direct old/new stores are separate directories.
+- JP direct uses goods type and weight card rules.
+- If an order contains special/sensitive goods, use the special/sensitive price card.
+- Only all-normal-goods orders use the normal-goods price card.
 
-### Logistics Rule
+## Product Daily Conversion
 
-Do not simply multiply logistics by line quantity.
+Main script:
 
-Use the configured `每单物流承载数量`:
-
-- same-order same-category items share logistics according to capacity
-- mixed-product orders count one order-level logistics cost
-- mixed-product logistics is proportionally allocated back to product categories
-
-Read the config range wide enough to include the logistics capacity column.
-
-## Report Semantics
-
-### Daily Summary
-
-Grouped by:
-
-- `文件名 + 日期`
-
-Used for:
-
-- order count
-- quantity
-- sample quantity
-- sales
-- cost totals
-
-### Daily Product Detail
-
-Top section:
-
-- `文件名 + 日期 + 产品大类`
-
-Bottom section:
-
-- `文件名 + 产品大类 + 产品名称`
-
-This sheet should still let the user inspect daily product performance.
-Do not remove the `日期` dimension from the top section unless the user explicitly changes the requirement.
-
-### SKU Detail
-
-Grouped by:
-
-- `文件名 + 日期 + 产品大类 + 产品名称`
-
-Used for SKU / variant troubleshooting.
-
-### Product Quantity Matrix
-
-Top section:
-
-- product x file summary
-
-Lower section:
-
-- `文件名 + 产品名称 + 日期`
-
-### Sample Statistics
-
-Grouped as:
-
-- `文件名 + 产品名称 + 日期`
-
-### Period Comparison
-
-- one file: still output single-period summary
-- two or more files: output cross-file comparison
-
-Do not require at least two files just to show a summary.
-
-## Output Formatting Rules
-
-Keep the current workbook behavior unless the user asks otherwise:
-
-- center align written cells
-- percentage columns shown as percent
-- blank separator rows inserted between different files in multi-file sections
-- file names shown directly in comparison tables instead of generic labels
-
-## Feishu Config Rules
-
-Config can come from:
-
-- `config/.env` + live Feishu fetch
-- local cache under `config/cache/`
-
-If no `.env` exists, prefer using local cache so the packaged tool can still run offline.
-
-When the user says Feishu changes are not reflected:
-
-1. check whether the program used cache first
-2. check whether `.env` exists in the runtime `config/`
-3. check whether the cache file for that sheet was refreshed
-
-## Working Style For This Repo
-
-When implementing changes in this repo:
-
-1. read the current report shape before editing
-2. preserve the user's agreed business semantics
-3. avoid broad refactors outside `main.py` and the country daily scripts
-4. do not commit local CSV data, cache files, or result workbooks
-5. verify with at least syntax compilation after code changes
-
-Preferred checks:
-
-```bash
-python -m py_compile sum_daily_order/config/cal_cost_return_jp_daily.py
-python -m py_compile sum_daily_order/config/cal_cost_return_vn_daily.py
+```text
+sum_daily_conversion/config/cal_product_daily_conversion.py
 ```
 
-If the user asks for a push:
+Config:
 
-- commit only code/doc changes related to the request
-- exclude local data and generated artifacts
+```text
+sum_daily_conversion/config/config.json
+sum_daily_conversion/config/product_sheet_mapping.csv
+```
 
-## Common Pitfalls
+Input:
 
-- Mistaking estimated gross profit for final finance profit
-- Putting CSV files into the wrong store directory
-- Forgetting that JP uses `cross-border` while VN uses `cross_border`
-- Reading too few config columns and missing `每单物流承载数量`
-- Assuming Feishu formula cells always return computed numeric values
-- Removing `日期` from `Daily Product Detail` and making daily product inspection impossible
-- Merging overlapping-date files into one summary and double-counting
+```text
+sum_daily_conversion/data/
+```
 
-## Recommended First Read Order
+Output:
 
-When starting a fresh session on this repo, read in this order:
+```text
+sum_daily_conversion/result/
+```
 
-1. `README.md`
-2. `TikTokDailyReport_使用说明.txt`
-3. `progress.md`
+Diagnostics:
+
+```text
+sum_daily_conversion/result/logs/
+```
+
+Keep `result/logs/`. It stores dry-run previews, skipped unmapped products, and mapping diagnostics.
+
+### Mapping matching rules (important)
+
+`product_sheet_mapping.csv` is keyed by `(店铺, 商品ID)` and supports two data layouts:
+
+1. **Store subdirectories** — `data/日本本土店/xxx.xlsx`. The store comes from the folder
+   name, so matching with `(store, product_id)` is exact.
+2. **Flat directory** — `data/xxx.xlsx`. There is no store info in the path, so the store
+   degrades to the placeholder `商品每日转化统计` (`DEFAULT_FLAT_STORE_NAME`).
+
+`ProductMapping.resolve` order:
+
+1. Exact `(store, product_id)` hit → use it.
+2. Store **is** a known store in the mapping but this product is not configured for it →
+   genuinely unmapped, reason `未配置映射`. Do **not** fall back across stores here, or a
+   product from store A could be written into store B's sheet.
+3. Store is the flat placeholder / unknown → fall back to `product_id`, then to `商品名`.
+4. Fallback only succeeds when the candidate sheet is **unique**. If one product ID maps to
+   several different sheets, skip with `映射歧义` and list the candidates in the log instead
+   of guessing.
+
+Never re-tighten this back to a strict `(store, product_id)`-only lookup: that is exactly what
+produced 0 output records on a flat `data/` directory.
+
+`商品名` is an optional mapping column, used only when `商品ID` is empty or the `xxx` placeholder.
+
+### Resolved issue: 0 syncable records
+
+Root cause was the mapping lookup, **not** the paths:
+
+- `data/` was flat, so `discover_store_dirs()` returned `[]` and the store became the
+  placeholder `商品每日转化统计`.
+- `mapping.get(("商品每日转化统计", product_id))` never matched the real store names, so all
+  743 source rows were skipped as `未配置映射` and the output was 0 records.
+- After the fix: dry-run parses **32** records; real mode writes
+  `sum_daily_conversion/result/商品每日转化统计_每天转化数据.xlsx`.
+
+Remaining work is data, not code:
+
+- The mapping covers only 26 unique product IDs (27 rows) while the two source files hold 384
+  unique product IDs. 16 IDs match → 32 records; the other **711** rows still need mapping rows.
+- Use `sum_daily_conversion/result/logs/mapping_diagnostics.csv` to fill the table. Status
+  values: `已匹配` / `未出现在源数据` / `歧义（同ID多sheet）`.
+- `1736121773627573268` maps to both `日本本土店=蜻蜓挂件` and `日本跨境店=鼻毛刀`. It is not
+  in the source data today, but in flat mode it would be reported as `映射歧义` and skipped.
+- Missing `发品状态` only raises a WARN; that column stays empty in the output.
+
+## Packaging
+
+Current EXE/package name:
+
+```text
+TikTokShopDataTool_v<version>.exe
+TikTokShopDataTool_v<version>_windows.zip
+```
+
+Manual build command:
+
+```bash
+pyinstaller --clean --onefile --name TikTokShopDataTool_v1.1.0 --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+```
+
+Update both files when changing packaging:
+
+- `.github/workflows/build-windows-exe.yml`
+- `.workflow/流水线-202607222147.yml`
+
+Release package should look like:
+
+```text
+TikTokShopDataTool_v<version>/
+├── TikTokShopDataTool_v<version>.exe
+├── TikTokShopDataTool_使用说明.txt
+├── VERSION
+├── sum_daily_order/
+│   ├── config/
+│   ├── data/
+│   └── result/
+└── sum_daily_conversion/
+    ├── config/
+    ├── data/
+    └── result/
+```
+
+## Working Rules
+
+- Check `git status --short` before editing.
+- Do not revert user changes unless explicitly asked.
+- Do not commit `.env`, generated result workbooks, cache folders, or local data unless the user explicitly wants that.
+- Prefer targeted changes to one module; do not refactor JP/VN/MX cost logic together unless needed.
+- After code changes, run at least:
+
+```bash
+python -m py_compile main.py \
+  sum_daily_order/config/cal_cost_return_jp_daily.py \
+  sum_daily_order/config/cal_cost_return_vn_daily.py \
+  sum_daily_order/config/cal_cost_return_mx_daily.py \
+  sum_daily_conversion/config/cal_product_daily_conversion.py
+```
+
+For conversion changes, also run:
+
+```bash
+python main.py --task conversion --dry-run
+```
+
+For launcher changes, test menu routing with:
+
+```bash
+printf '2\n' | python main.py
+```
+
+## Local Run Notes
+
+`main.py` imports `pandas`, so a bare `python3` may fail with
+`ModuleNotFoundError: No module named 'pandas'`. In this environment use the managed venv,
+which already has pandas + openpyxl:
+
+```bash
+/Users/macbook/.workbuddy/binaries/python/envs/default/bin/python main.py --task conversion --dry-run
+```
+
+Regression test for the mapping fallback (store-directory mode must still match exactly):
+
+1. Create a temp root with `config/config.json`, `config/product_sheet_mapping.csv`,
+   `data/日本直邮一店/0903-0909商品数据.xlsx` and `result/logs/`.
+2. Run with `TIKTOK_CONVERSION_ROOT=<temp root>` set *before* importing the module and assert
+   16 records are parsed with match mode `精确(店铺+商品ID)` in `mapping_diagnostics.csv`.
+
+## Packaging Sync
+
+Both pipeline files already carry the required flag and the `TikTokShopDataTool_v<version>`
+naming — verify, do not duplicate:
+
+- `.github/workflows/build-windows-exe.yml`
+- `.workflow/流水线-202607222147.yml`
+
+If you ever change packaging, keep `--hidden-import sum_daily_conversion.config.cal_product_daily_conversion`
+(and the `TikTokShopDataTool_${tagVersion}` / `_windows` names) identical in both files.
+
+## First Files To Read
+
+For handoff or unfamiliar work:
+
+1. `progress.md`
+2. `README.md`
+3. `TikTokShopDataTool_使用说明.txt`
 4. `main.py`
-5. the relevant country daily script
-
-## Expected Response Style
-
-When helping on this project:
-
-- explain business impact plainly
-- point out whether an issue is logic, config, cache, or path related
-- separate "current behavior" from "recommended change"
-- be careful with file-count, date-range, and store-directory assumptions
-- if the user says "先不要写代码", stay at solution level first
-- if the user says "开始改代码", implement directly
+5. The relevant module script under `sum_daily_order/config/` or `sum_daily_conversion/config/`

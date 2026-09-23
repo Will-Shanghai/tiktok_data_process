@@ -7,7 +7,7 @@ import re
 import sys
 import time
 from http.client import IncompleteRead, RemoteDisconnected
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -323,8 +323,98 @@ def get_required_cell(row: List[str], indexes: Dict[str, int], field: str) -> st
     return row[index].strip()
 
 
-def load_mapping(path: Path) -> Dict[Tuple[str, str], str]:
-    mapping: Dict[Tuple[str, str], str] = {}
+@dataclass
+class MappingEntry:
+    store: str
+    product_id: str
+    product_name: str
+    sheet_name: str
+    match_count: int = 0
+    match_modes: set = field(default_factory=set)
+
+
+class ProductMapping:
+    """商品映射索引。
+
+    映射表的主键是 (店铺, 商品ID)。但 sum_daily_conversion/data 允许两种摆放方式：
+
+    1. 分店铺子目录：data/日本本土店/xxx.xlsx —— 此时 store 是真实店铺，走精确匹配。
+    2. 扁平目录：data/xxx.xlsx —— 此时无法从路径得到店铺，store 会退化成占位名。
+       如果仍然要求 (店铺, 商品ID) 精确匹配，扁平目录下的商品会全部判定为“未配置映射”，
+       输出 0 条（这就是之前 743 条被跳过的原因）。
+
+    因此这里额外维护“无店铺”索引：当源数据来自扁平目录（store 不是映射表里的任何店铺）时，
+    退化为按 商品ID / 商品名 匹配。为避免写错 sheet，只有在候选 sheet 唯一时才回退成功；
+    同一商品ID 对应多个不同 sheet 时按“映射歧义”跳过，并输出候选明细。
+    """
+
+    def __init__(self) -> None:
+        self.entries: List[MappingEntry] = []
+        self.stores: set = set()
+        self._by_store_id: Dict[Tuple[str, str], MappingEntry] = {}
+        self._by_id: Dict[str, List[MappingEntry]] = {}
+        self._by_name: Dict[str, List[MappingEntry]] = {}
+
+    def add(self, store: str, product_id: str, product_name: str, sheet_name: str) -> None:
+        entry = MappingEntry(store, product_id, product_name, sheet_name)
+        self.entries.append(entry)
+        self.stores.add(store)
+        if product_id:
+            self._by_store_id[(store, product_id)] = entry
+            self._by_id.setdefault(product_id, []).append(entry)
+        if product_name:
+            self._by_name.setdefault(product_name, []).append(entry)
+
+    def is_known_store(self, store: str) -> bool:
+        return store in self.stores
+
+    def ambiguous_product_ids(self) -> Dict[str, List[MappingEntry]]:
+        """商品ID 在映射表里对应多个不同 sheet 的情况。"""
+        return {
+            product_id: entries
+            for product_id, entries in self._by_id.items()
+            if len({entry.sheet_name for entry in entries}) > 1
+        }
+
+    @staticmethod
+    def _count(entries: Iterable[MappingEntry], mode: str) -> None:
+        for entry in entries:
+            entry.match_count += 1
+            entry.match_modes.add(mode)
+
+    def resolve(self, store: str, product_id: str, product_name: str) -> Tuple[Optional[str], str]:
+        """返回 (飞书sheet名, 跳过原因)。匹配成功时原因为空字符串。"""
+        if product_id:
+            entry = self._by_store_id.get((store, product_id))
+            if entry is not None:
+                self._count([entry], "精确(店铺+商品ID)")
+                return entry.sheet_name, ""
+
+        # 店铺是映射表里已知的真实店铺，但该商品没配置 → 就是真的没配，不做跨店铺回退。
+        if self.is_known_store(store):
+            return None, "未配置映射"
+
+        # 扁平目录 / 未知店铺：退化为无店铺匹配。
+        for key, table, label in (
+            (product_id, self._by_id, "商品ID"),
+            (product_name, self._by_name, "商品名"),
+        ):
+            if not key:
+                continue
+            candidates = table.get(key, [])
+            if not candidates:
+                continue
+            distinct = sorted({item.sheet_name for item in candidates})
+            if len(distinct) == 1:
+                self._count(candidates, f"{label}回退")
+                return distinct[0], ""
+            detail = ", ".join(f"{item.store}={item.sheet_name}" for item in candidates)
+            return None, f"映射歧义：{label} 对应多个不同 sheet（{detail}），请拆分数据目录或调整映射表"
+        return None, "未配置映射"
+
+
+def load_mapping(path: Path) -> ProductMapping:
+    mapping = ProductMapping()
     with path.open("r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         required = {"店铺", "商品ID", "飞书sheet名"}
@@ -333,10 +423,17 @@ def load_mapping(path: Path) -> Dict[Tuple[str, str], str]:
         for row in reader:
             store = (row.get("店铺") or "").strip()
             product_id = normalize_product_id(row.get("商品ID") or "")
+            product_name = (row.get("商品名") or "").strip()
             sheet_name = (row.get("飞书sheet名") or "").strip()
-            if not store or not product_id or not sheet_name or product_id.lower() == "xxx":
+            if not store or not sheet_name:
                 continue
-            mapping[(store, product_id)] = sheet_name
+            if not product_id and not product_name:
+                continue
+            if product_id.lower() == "xxx":
+                product_id = ""
+            if not product_id and not product_name:
+                continue
+            mapping.add(store, product_id, product_name, sheet_name)
     return mapping
 
 
@@ -344,7 +441,7 @@ def normalize_product_id(value: str) -> str:
     return str(value).strip().lstrip("'").replace("\u200b", "")
 
 
-def parse_workbook(path: Path, store: str, file_date: str, mapping: Dict[Tuple[str, str], str]) -> Tuple[List[ProductRow], List[str], List[SkippedProduct]]:
+def parse_workbook(path: Path, store: str, file_date: str, mapping: ProductMapping) -> Tuple[List[ProductRow], List[str], List[SkippedProduct]]:
     rows = read_xlsx_rows(path)
     return parse_workbook_from_rows(path, store, file_date, mapping, rows)
 
@@ -353,7 +450,7 @@ def parse_workbook_from_rows(
     path: Path,
     store: str,
     file_date: str,
-    mapping: Dict[Tuple[str, str], str],
+    mapping: ProductMapping,
     rows: List[List[str]],
 ) -> Tuple[List[ProductRow], List[str], List[SkippedProduct]]:
     group_header, header, data_rows = find_header_and_data(rows)
@@ -378,9 +475,9 @@ def parse_workbook_from_rows(
     for row in data_rows:
         product_name = get_required_cell(row, indexes, "商品名")
         product_id = normalize_product_id(get_required_cell(row, indexes, "商品 ID"))
-        sheet_name = mapping.get((store, product_id))
+        sheet_name, skip_reason = mapping.resolve(store, product_id, product_name)
         if not sheet_name:
-            skipped.append(SkippedProduct(store, path, product_id, product_name, "未配置映射"))
+            skipped.append(SkippedProduct(store, path, product_id, product_name, skip_reason))
             continue
         values = [
             get_standard_value(row, group_header, header, indexes, group, field, file_date)
@@ -607,6 +704,37 @@ def write_skipped(skipped: List[SkippedProduct], log_dir: Path) -> Optional[Path
         writer.writerow(["店铺", "文件", "商品ID", "商品名", "原因"])
         for item in skipped:
             writer.writerow([item.store, item.source_file.name, item.product_id, item.product_name, item.reason])
+    return path
+
+
+def write_mapping_diagnostics(mapping: ProductMapping, log_dir: Path) -> Optional[Path]:
+    """输出映射表体检表，方便运营补齐/修正 product_sheet_mapping.csv。"""
+    if not mapping.entries:
+        return None
+    log_dir.mkdir(parents=True, exist_ok=True)
+    path = log_dir / "mapping_diagnostics.csv"
+    ambiguous = set(mapping.ambiguous_product_ids())
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["店铺", "商品ID", "商品名", "飞书sheet名", "状态", "命中次数", "命中方式"])
+        for entry in mapping.entries:
+            if entry.match_count:
+                status = "已匹配"
+            elif entry.product_id and entry.product_id in ambiguous:
+                status = "歧义（同ID多sheet）"
+            else:
+                status = "未出现在源数据"
+            writer.writerow(
+                [
+                    entry.store,
+                    entry.product_id,
+                    entry.product_name,
+                    entry.sheet_name,
+                    status,
+                    entry.match_count,
+                    "/".join(sorted(entry.match_modes)),
+                ]
+            )
     return path
 
 
@@ -860,6 +988,8 @@ def run_daily_conversion(config_path: str | Path = "config/config.json", env_pat
 
     if data_dir != configured_data_dir:
         print(f"[INFO] data_dir 已自动切换为：{data_dir}")
+    if not store_dirs:
+        print(f"[INFO] data 下没有店铺子目录，按扁平模式读取，店铺标记为“{DEFAULT_FLAT_STORE_NAME}”，映射按 商品ID/商品名 回退匹配。")
 
     for store, path in iter_input_files(data_dir, store_dirs):
         rows = read_xlsx_rows(path)
@@ -873,11 +1003,24 @@ def run_daily_conversion(config_path: str | Path = "config/config.json", env_pat
 
     preview_path = write_preview(all_rows, log_dir)
     skipped_path = write_skipped(skipped_products, log_dir)
+    diagnostics_path = write_mapping_diagnostics(mapping, log_dir)
     for warning in warnings:
         print(f"[WARN] {warning}")
     print(f"[INFO] 已解析可同步记录：{len(all_rows)} 条")
     if skipped_products:
-        print(f"[INFO] 未配置映射并跳过：{len(skipped_products)} 条，明细：{skipped_path}")
+        reason_counts: Dict[str, int] = {}
+        for item in skipped_products:
+            key = item.reason.split("：", 1)[0]
+            reason_counts[key] = reason_counts.get(key, 0) + 1
+        detail = "，".join(f"{key} {count} 条" for key, count in sorted(reason_counts.items(), key=lambda kv: -kv[1]))
+        print(f"[INFO] 已跳过：{len(skipped_products)} 条（{detail}），明细：{skipped_path}")
+        for key, count in reason_counts.items():
+            if key.startswith("映射歧义"):
+                print(f"[WARN] 有 {count} 条商品 {key}，请查看 {skipped_path} 中的候选明细。")
+    matched_ids = {row.product_id for row in all_rows}
+    print(f"[INFO] 映射表命中商品：{len(matched_ids)} 个（映射表共 {len(mapping.entries)} 条）")
+    if diagnostics_path:
+        print(f"[INFO] 映射表体检：{diagnostics_path}")
     print(f"[INFO] 本地预览：{preview_path}")
 
     if dry_run:
