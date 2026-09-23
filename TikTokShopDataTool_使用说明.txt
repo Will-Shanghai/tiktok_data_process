@@ -73,7 +73,7 @@ TikTokShopDataTool 使用说明
 
 3. 文件怎么放
 
-运行订单日报前，请先把 `.env` 放到 `sum_daily_order/config/.env`。
+运行订单日报前，请先把 `.env` 放到 exe 同级的 `config/.env`。
 
 这个文件现在必须有，因为订单日报要先读飞书配置。
 
@@ -130,7 +130,7 @@ sum_daily_conversion\data
 6. 常见问题
 
 - 没有结果：先看对应功能的 `data` 目录里有没有文件，再看目录放对没有
-- 找不到订单配置：先看 `sum_daily_order/config/.env` 在不在，再看 `sum_daily_order/config/app_config.xlsx` 和 `sum_daily_order/config/cache`
+- 找不到订单配置：先看 exe 同级的 `config/.env` 在不在，再看 `sum_daily_order/config/app_config.xlsx` 和 `sum_daily_order/config/cache`
 - 某一列不存在：重新从 TikTok 后台导出 CSV，不要手改表头
 - 提示 `SKU ID` 没有匹配到成本：说明飞书配置里没找到这个 SKU，先检查 `SKU ID` 是否写对，再检查对应产品成本有没有配置
 - 提示 `产品成本` 为空：说明这个 SKU 在飞书配置里没有成本，补上 `产品成本(元)` 后再跑
@@ -142,7 +142,7 @@ sum_daily_conversion\data
 7. 一般不用改
 
 - `sum_daily_order/config/app_config.xlsx`
-- `sum_daily_order/config/.env`
+- exe 同级的 `config/.env`
 - `sum_daily_order/config/cache`
 
 如果这些要改，找负责配置的人。

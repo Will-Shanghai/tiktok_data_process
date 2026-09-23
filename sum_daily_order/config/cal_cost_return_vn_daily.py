@@ -62,12 +62,10 @@ def read_runtime_version():
 APP_VERSION = read_runtime_version()
 
 for env_path in [
-    os.path.join(PROJECT_ROOT, "config", ".env"),
-    os.path.join(CURRENT_SCRIPT_DIR, ".env"),
+    os.path.join(os.path.dirname(PROJECT_ROOT), "config", ".env"),
 ]:
     if os.path.exists(env_path):
         load_dotenv(env_path)
-load_dotenv()
 
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")

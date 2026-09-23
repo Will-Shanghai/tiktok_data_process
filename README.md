@@ -214,9 +214,9 @@ GitHub Actions 自动打包时，默认只负责生成 exe 和交付包，不会
 sum_daily_order/config/cache/
 ```
 
-所以普通同事下载 Release 包后，只要把 `.env` 放到 `sum_daily_order/config/.env`，就可以在线读取飞书配置。
+所以普通同事下载 Release 包后，只要把 `.env` 放到 `config/.env`，就可以在线读取飞书配置。
 
-如果你自己需要在本机运行时在线刷新飞书配置，请在 `sum_daily_order/config/.env` 中配置飞书应用凭证：
+如果你自己需要在本机运行时在线刷新飞书配置，请在 `config/.env` 中配置飞书应用凭证：
 
 ```text
 FEISHU_APP_ID=你的飞书应用ID
@@ -249,8 +249,8 @@ MEXICO_EXCHANGE_RATE=0.000000
 
 运行时规则：
 
-- 有 `sum_daily_order/config/.env` 时，程序会优先从飞书刷新配置，并更新本地 `sum_daily_order/config/cache/`。
-- 没有 `sum_daily_order/config/.env` 时，程序会使用 `sum_daily_order/config/cache/` 离线运行。
+- 有 `config/.env` 时，程序会优先从飞书刷新配置，并更新本地 `sum_daily_order/config/cache/`。
+- 没有 `config/.env` 时，程序会使用 `sum_daily_order/config/cache/` 离线运行。
 
 ## Windows 打包
 
@@ -313,7 +313,7 @@ VERSION
 - GitHub Release 的 `Assets`
 
 交付包里只保留日报工具本身需要的文件，不再附带广告/商品卡/订单分析等旧模块目录。
-交付包会包含 `sum_daily_order/config/.env.example`，但不会包含真实 `.env` 密钥文件。
+交付包会包含 `config/.env.example`，但不会包含真实 `.env` 密钥文件。
 
 建议平时给同事发飞书通知里的 Release 链接。打开 Release 页面后：
 
@@ -323,7 +323,7 @@ VERSION
 
 `Source code` 是 GitHub 自动生成的源码包，不是给同事使用的工具包。
 
-如果你希望在线读取飞书配置，请把 `.env` 放到 `sum_daily_order/config/.env`，内容格式参考 `sum_daily_order/config/.env.example`。
+如果你希望在线读取飞书配置，请把 `.env` 放到 `config/.env`，内容格式参考 `config/.env.example`。
 
 ### 飞书机器人说明
 
@@ -334,7 +334,7 @@ VERSION
 FEISHU_BOT_WEBHOOK
 ```
 
-如果你希望同事本地运行时在线读取飞书配置，就把飞书应用密钥放在本地的 `sum_daily_order/config/.env`，不要提交到 Git。
+如果你希望同事本地运行时在线读取飞书配置，就把飞书应用密钥放在本地的 `config/.env`，不要提交到 Git。
 
 ### 手动发版
 
@@ -441,15 +441,15 @@ dist/sum_daily_order/config/app_config.xlsx
 GitHub Actions 自动打包出来的 Release 包会自带：
 
 ```text
-sum_daily_order/config/.env.example
+config/.env.example
 ```
 
-普通同事如果要在线刷新飞书配置，需要自己准备 `sum_daily_order/config/.env`。
+普通同事如果要在线刷新飞书配置，需要自己准备 `config/.env`。
 
 如果你自己希望本机或某个内部版本每次运行都能在线读取飞书配置，也可以单独准备：
 
 ```text
-sum_daily_order/config/.env
+config/.env
 ```
 
 内容格式：
@@ -467,7 +467,7 @@ MEXICO_EXCHANGE_RATE=0.000000
 注意：`.env` 里是飞书应用密钥，不建议放进 Release 包，也不要提交到 Git。普通同事如果没有 `.env`，就只能依赖 Release 包里已有的 `sum_daily_order/config/cache/`。
 
 注意：`app_config.xlsx` 只是“运行哪些国家/店铺”的配置；SKU 成本、物流成本、寄样成本、产品大类来自飞书配置表或本地缓存。  
-如果 exe 目录下没有 `sum_daily_order/config/.env`，就必须准备：
+如果 exe 目录下没有 `config/.env`，就必须准备：
 
 ```text
 dist/sum_daily_order/config/cache/
@@ -534,27 +534,27 @@ sum_daily_order/data/data_JP/direct_new/
 如果你希望在线读取飞书，请检查：
 
 ```text
-sum_daily_order/config/.env
+config/.env
 ```
 
-如果只是给普通同事使用，建议提前准备好 `sum_daily_order/config/.env`，让程序在线读取飞书。
+如果只是给普通同事使用，建议提前准备好 `config/.env`，让程序在线读取飞书。
 
 打包后对应路径是：
 
 ```text
-dist/sum_daily_order/config/.env
+dist/config/.env
 ```
 
 也就是把源码里的：
 
 ```text
-sum_daily_order/config/.env
+config/.env
 ```
 
 整个复制到：
 
 ```text
-dist/sum_daily_order/config/.env
+dist/config/.env
 ```
 
 ### pip install 最后出现一大段 Traceback

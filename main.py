@@ -167,8 +167,10 @@ def get_runtime_root():
 
     if getattr(sys, "frozen", False):
         exe_root = Path(sys.executable).resolve().parent
-        sum_daily_root = exe_root / "sum_daily_order"
-        return sum_daily_root if sum_daily_root.is_dir() else exe_root
+        # Packaged files always live below the EXE directory.  Never fall back
+        # to the EXE directory itself, otherwise ensure_runtime_dirs() creates
+        # top-level data/result folders beside the executable.
+        return exe_root / "sum_daily_order"
 
     source_root = Path(__file__).resolve().parent
     sum_daily_root = source_root / "sum_daily_order"
@@ -193,6 +195,13 @@ def get_conversion_runtime_root():
     if env_root:
         return Path(env_root).resolve()
     return get_project_runtime_root() / "sum_daily_conversion"
+
+
+def get_public_config_root():
+    """Return the shared config directory beside the EXE/project entrypoint."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "config"
+    return Path(__file__).resolve().parent / "config"
 
 
 APP_ROOT = get_runtime_root()
@@ -319,7 +328,7 @@ def split_stores_by_site(stores):
 
 
 def has_feishu_env():
-    env_file = APP_ROOT / "config" / ".env"
+    env_file = get_public_config_root() / ".env"
     if env_file.exists():
         return True
     return bool(os.getenv("FEISHU_APP_ID") and os.getenv("FEISHU_APP_SECRET"))
@@ -345,7 +354,7 @@ def check_config_sources(stores):
         f"缺少缓存的 Sheet:\n{missing_text}\n\n"
         "解决办法二选一：\n"
         "1. 把源码里的 sum_daily_order/config/cache 文件夹复制到 exe 同级的 sum_daily_order/config/cache；\n"
-        "2. 在 exe 同级的 sum_daily_order/config/.env 中配置对应国家的飞书 App ID / App Secret。"
+        "2. 在 exe 同级的 config/.env 中配置对应国家的飞书 App ID / App Secret。"
     )
 
 
@@ -410,7 +419,7 @@ def run_conversion(dry_run=False):
     os.environ["TIKTOK_REPORT_VERSION"] = APP_VERSION
 
     conversion_config = conversion_root / "config" / "config.json"
-    conversion_env = conversion_root / "config" / ".env"
+    conversion_env = get_public_config_root() / ".env"
     if not conversion_config.exists():
         raise FileNotFoundError(f"找不到转化统计配置文件: {conversion_config}")
 

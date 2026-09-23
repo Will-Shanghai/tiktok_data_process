@@ -70,12 +70,10 @@ def read_runtime_version():
 APP_VERSION = read_runtime_version()
 
 for env_path in [
-    os.path.join(PROJECT_ROOT, "config", ".env"),
-    os.path.join(CURRENT_SCRIPT_DIR, ".env"),
+    os.path.join(os.path.dirname(PROJECT_ROOT), "config", ".env"),
 ]:
     if os.path.exists(env_path):
         load_dotenv(env_path)
-load_dotenv()
 
 # -------- 飞书应用凭证（必须配置在 .env 中）--------
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
