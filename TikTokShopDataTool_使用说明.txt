@@ -1,0 +1,148 @@
+TikTokShopDataTool 使用说明
+==========================
+
+这个程序是做什么的
+----------------------
+
+这个程序用于生成 TikTok Shop 订单成本日报/周期报表，也可以生成商品每日转化统计。
+
+订单日报会读取 sum_daily_order\data 文件夹里的 TikTok Shop 订单 CSV 文件，然后自动生成 Excel 报表到 sum_daily_order\result 文件夹。
+
+商品每日转化统计会读取 sum_daily_conversion\data 文件夹里的 Excel 文件，然后自动生成结果到 sum_daily_conversion\result 文件夹。
+
+重要说明：
+
+报表里的“利润”“利润率”不是最终财务利润。
+它只是用销售额减去当前程序已经配置的产品成本、物流成本、寄样成本后得到的预估毛利。
+
+程序目前没有扣除达人佣金、广告费、平台佣金、平台服务费、支付手续费、退款售后、仓储人工、税费等费用。
+
+所以这个利润只能用来快速判断产品是否还有毛利空间，不能直接当成最终利润或财务结算利润。
+
+
+1. 先装什么
+
+- Windows 同事：下载后先解压，再双击里面的 TikTokShopDataTool.exe 运行
+- 不需要安装 Python
+- 只有自己打包的人才需要 Python 3.11
+
+2. 使用前准备
+
+先从 TikTok Shop 后台导出订单 CSV 文件。
+
+   一般操作路径是：
+
+   TikTok Shop 后台 → 订单 → 管理订单界面
+
+   进入“管理订单界面”后，请先点击订单状态 Tab 里的“全部”。
+
+   注意：
+   管理订单界面下面有很多 Tab，例如：
+
+   - 全部
+   - 待支付
+   - 待发货
+   - 已发货
+   - 已完成
+   - 已取消
+
+   请一定选择“全部”，不要只选择“待发货”或“已完成”。
+   如果选错 Tab，导出的订单会不完整，报表数据也会不准。
+
+   然后点击“筛选”，按需要筛选日期，例如本周、本月，或者自定义日期范围。
+
+   筛选后，请确认页面上显示的订单数量是否符合预期。
+
+   例如页面提示：
+
+   找到 545 个订单
+
+   这表示当前筛选条件下共有 545 个订单。
+
+   确认订单数量没问题后，选择这个日期范围内的所有订单，然后点击导出。
+
+   导出格式请选择 CSV。
+
+   注意：
+   - 请导出订单明细 CSV，不要导出 Excel 格式。
+   - 日期范围要和你本次想统计的周期一致。
+   - 如果要做两个周期对比，可以分别导出两个日期范围的 CSV，然后都放进同一个店铺目录。
+   - 导出前请确认当前 Tab 是“全部”。
+   - 导出前请确认页面订单数量和你预期的数量一致。
+
+
+3. 文件怎么放
+
+运行订单日报前，请先把 `.env` 放到 `sum_daily_order/config/.env`。
+
+这个文件现在必须有，因为订单日报要先读飞书配置。
+
+把订单 CSV 放到对应目录：
+
+```
+sum_daily_order\data\data_JP\local - 日本本土店
+sum_daily_order\data\data_JP\cross_border - 日本跨境店
+sum_daily_order\data\data_JP\direct_old - 日本直邮一店
+sum_daily_order\data\data_JP\direct_new - 日本直邮二店
+sum_daily_order\data\data_VN\local - 越南本土店
+sum_daily_order\data\data_VN\cross_border - 越南跨境店
+sum_daily_order\data\data_MX\local - 墨西哥本土店
+sum_daily_order\data\data_MX\direct_old - 墨西哥直邮一店
+sum_daily_order\data\data_MX\direct_new - 墨西哥直邮二店
+```
+
+商品每日转化统计的 Excel 文件放到：
+
+```
+sum_daily_conversion\data
+```
+
+文件放错目录，程序就会按错店铺算。
+
+
+4. 怎么运行
+
+双击 `TikTokShopDataTool.exe`。
+
+程序会先让你选择功能：
+
+1 - 订单成本日报
+2 - 商品每日转化统计
+3 - 全部运行
+
+如果选择 1 订单成本日报，程序会继续让你选择国家：日本、越南、墨西哥或全部。
+
+如果选择 2 商品每日转化统计，不需要再选择国家，程序会直接读取 `sum_daily_conversion\data` 下面的文件并生成结果。
+
+5. 结果在哪
+
+订单日报结果会放在 `sum_daily_order\result` 文件夹里。
+
+商品每日转化统计结果会放在 `sum_daily_conversion\result` 文件夹里。
+
+文件名一般会包含：
+
+- `Daily_Performance_Report_JP`
+- `Daily_Performance_Report_VN`
+- `Daily_Performance_Report_MX`
+- 商品每日转化统计文件名一般是 `商品每日转化统计_每天转化数据.xlsx`
+
+6. 常见问题
+
+- 没有结果：先看对应功能的 `data` 目录里有没有文件，再看目录放对没有
+- 找不到订单配置：先看 `sum_daily_order/config/.env` 在不在，再看 `sum_daily_order/config/app_config.xlsx` 和 `sum_daily_order/config/cache`
+- 某一列不存在：重新从 TikTok 后台导出 CSV，不要手改表头
+- 提示 `SKU ID` 没有匹配到成本：说明飞书配置里没找到这个 SKU，先检查 `SKU ID` 是否写对，再检查对应产品成本有没有配置
+- 提示 `产品成本` 为空：说明这个 SKU 在飞书配置里没有成本，补上 `产品成本(元)` 后再跑
+- 提示 `物流成本` 为空：说明这个 SKU 的物流信息没配全，检查 `计费重kg`、`头程物流成本(元)`、`尾程物流成本(元)` 或相关物流列
+- 提示 `实重/长宽高` 缺失：说明该 SKU 的重量信息不完整，先补飞书配置再重新运行
+- 提示 `进口IVA` 为空：说明飞书里没有这条 IVA 记录，程序会按默认公式重新计算
+- 文件夹为空：这个目录里没有 CSV，放进去再跑
+
+7. 一般不用改
+
+- `sum_daily_order/config/app_config.xlsx`
+- `sum_daily_order/config/.env`
+- `sum_daily_order/config/cache`
+
+如果这些要改，找负责配置的人。
