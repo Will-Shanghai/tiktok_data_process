@@ -9,9 +9,51 @@ config/app_config.xlsx, then runs the enabled JP/VN/data_MX daily report jobs.
 import argparse
 import os
 import sys
+import tempfile
+import traceback
+from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
+
+def get_startup_log_path():
+    """Choose a writable log path before third-party imports are loaded."""
+    if getattr(sys, "frozen", False):
+        root = Path(sys.executable).resolve().parent
+    else:
+        root = Path(__file__).resolve().parent
+    try:
+        log_dir = root / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir / "tiktok_tool_startup.log"
+    except OSError:
+        return Path(tempfile.gettempdir()) / "tiktok_tool_startup.log"
+
+
+STARTUP_LOG_PATH = get_startup_log_path()
+
+
+def startup_log(message):
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}"
+    try:
+        with STARTUP_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+    except OSError:
+        pass
+    print(line, flush=True)
+
+
+startup_log("程序启动")
+startup_log(f"冻结模式: {getattr(sys, 'frozen', False)}")
+startup_log(f"可执行文件: {getattr(sys, 'executable', '')}")
+startup_log(f"当前目录: {os.getcwd()}")
+startup_log(f"启动日志: {STARTUP_LOG_PATH}")
+
+try:
+    import pandas as pd
+    startup_log("pandas 导入成功")
+except Exception:
+    startup_log("pandas 导入失败\n" + traceback.format_exc())
+    raise
 
 
 DEFAULT_APP_VERSION = "v1.1.0"
@@ -378,12 +420,14 @@ def run_conversion(dry_run=False):
 
 
 def main():
+    startup_log("进入 main()")
     parser = argparse.ArgumentParser(description="TikTok Shop data tool launcher")
     parser.add_argument("--site", choices=["JP", "VN", "MX", "all"], help="直接运行指定站点")
     parser.add_argument("--task", choices=["order", "conversion", "all"], help="直接运行指定功能")
     parser.add_argument("--dry-run", action="store_true", help="转化统计只解析预览，不写入飞书")
     parser.add_argument("--list", action="store_true", help="列出 app_config.xlsx 中启用的店铺")
     args = parser.parse_args()
+    startup_log(f"命令行参数: {sys.argv[1:]}")
 
     print("=" * 60)
     print(f"TikTok Shop 数据工具 {APP_VERSION}")
@@ -392,6 +436,7 @@ def main():
     print(f"配置文件: {CONFIG_PATH}")
 
     try:
+        startup_log("开始显示功能菜单或处理命令行任务")
         if args.list:
             stores = load_app_config()
             if not stores:
@@ -402,6 +447,7 @@ def main():
             return
 
         task = args.task or ("order" if args.site else choose_task())
+        startup_log(f"选择的功能: {task}")
         if task not in {"order", "conversion", "all"}:
             print("未选择有效功能，程序结束。")
             return
@@ -414,10 +460,13 @@ def main():
                 run(site)
 
         if task in {"conversion", "all"}:
+            startup_log("开始运行商品每日转化统计")
             run_conversion(dry_run=args.dry_run)
     except Exception as exc:
+        startup_log("程序异常:\n" + traceback.format_exc())
         print(f"\n❌ 程序运行失败: {exc}")
     finally:
+        startup_log("程序进入退出等待")
         if getattr(sys, "frozen", False):
             input("\n按回车键退出...")
 
