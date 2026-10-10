@@ -209,6 +209,7 @@ CONFIG_PATH = APP_ROOT / "config" / "app_config.xlsx"
 
 
 def ensure_runtime_dirs():
+    get_public_config_root().mkdir(parents=True, exist_ok=True)
     for folder in ["config", "data", "result"]:
         (APP_ROOT / folder).mkdir(parents=True, exist_ok=True)
     for folder in [
@@ -344,7 +345,11 @@ def check_config_sources(stores):
     if has_feishu_env():
         return
 
-    missing = [store["sheet_name"] for store in stores if not cache_file_for_sheet(store["sheet_name"]).exists()]
+    missing = []
+    for store in stores:
+        sheet_name = store["sheet_name"]
+        if sheet_name not in missing and not cache_file_for_sheet(sheet_name).exists():
+            missing.append(sheet_name)
     if not missing:
         return
 
@@ -430,6 +435,9 @@ def run_conversion(dry_run=False):
 
 def main():
     startup_log("进入 main()")
+    # Create the user-writable public config directory before showing the menu.
+    # It is intentionally empty: real .env credentials must be supplied locally.
+    get_public_config_root().mkdir(parents=True, exist_ok=True)
     parser = argparse.ArgumentParser(description="TikTok Shop data tool launcher")
     parser.add_argument("--site", choices=["JP", "VN", "MX", "all"], help="直接运行指定站点")
     parser.add_argument("--task", choices=["order", "conversion", "all"], help="直接运行指定功能")

@@ -991,7 +991,11 @@ def run_daily_conversion(config_path: str | Path = "config/config.json", env_pat
     if not store_dirs:
         print(f"[INFO] data 下没有店铺子目录，按扁平模式读取，店铺标记为“{DEFAULT_FLAT_STORE_NAME}”，映射按 商品ID/商品名 回退匹配。")
 
-    for store, path in iter_input_files(data_dir, store_dirs):
+    input_files = list(iter_input_files(data_dir, store_dirs))
+    if not input_files:
+        print(f"[WARN] 未找到输入 Excel：{data_dir}。product_sheet_mapping.csv 只负责商品映射，不能代替源数据文件。")
+
+    for store, path in input_files:
         rows = read_xlsx_rows(path)
         file_date = parse_date_from_workbook(rows, default_year, date_output_format)
         if not file_date:
