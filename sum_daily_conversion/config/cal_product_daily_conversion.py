@@ -134,6 +134,13 @@ ORDER_STRUCTURE_TOTAL_HEADER_GROUPS = [
 ]
 
 DEFAULT_STORE_ORDER = ["日本本土店", "日本直邮一店", "日本直邮二店", "日本跨境店"]
+TOTAL_FUNNEL_CHANNELS = ["全部", "商家视频", "联盟", "商家商品卡"]
+for _channel in TOTAL_FUNNEL_CHANNELS:
+    _label = "商品卡" if _channel == "商家商品卡" else _channel
+    ORDER_STRUCTURE_TOTAL_HEADER_FIELDS.extend(
+        f"{_label}{field}" for field in ("曝光次数", "点击次数", "SKU订单数", "点击率", "转化率")
+    )
+    ORDER_STRUCTURE_TOTAL_HEADER_GROUPS.extend([_label] * 5)
 DEFAULT_FLAT_STORE_NAME = "商品每日转化统计"
 NS = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
@@ -943,26 +950,35 @@ def build_order_structure_detail(rows: List[ProductRow]) -> List[List[str]]:
 
 
 def build_order_structure_total(rows: List[ProductRow]) -> List[List[str]]:
-    indexes = order_structure_column_indexes()
-    totals: Dict[Tuple[str, str], List[int]] = {}
-    for row in rows:
-        counts = [
-            parse_count(row.values[indexes["total"]]),
-            parse_count(row.values[indexes["merchant_video"]]),
-            parse_count(row.values[indexes["alliance"]]),
-            parse_count(row.values[indexes["product_card"]]),
-        ]
-        if any(value is None for value in counts):
-            continue
-        key = (row.source_file.stem, row.store)
-        bucket = totals.setdefault(key, [0, 0, 0, 0])
-        for index, value in enumerate(counts):
-            bucket[index] += value
+    # Store totals use every source product, including products absent from mapping.
+    # Repeated product rows are retained; no unique-user fields are used.
+    result = []
+    sources = {(row.source_file, row.store) for row in rows}
+    for path, store in sorted(sources, key=lambda item: (str(item[0]), item[1])):
+        groups, headers, source_rows = find_header_and_data(read_xlsx_rows(path))
+        product_index = first_header_index(headers).get("商品 ID")
+        products = [row for row in source_rows if product_index is not None
+                    and product_index < len(row) and str(row[product_index]).strip()]
 
-    return [
-        [source_name, store, *order_structure_values(*counts)]
-        for (source_name, store), counts in sorted(totals.items())
-    ]
+        def total(group, field):
+            index = grouped_header_index(groups, headers, group, field)
+            if index is None or not products:
+                return None
+            values = [parse_count(row[index]) if index < len(row) else None for row in products]
+            # Missing values must not silently become zero or partial store totals.
+            return None if any(value is None for value in values) else sum(values)
+
+        orders = [total(channel, "订单数" if channel == "全部" else "归因订单数")
+                  for channel in TOTAL_FUNNEL_CHANNELS]
+        output = [path.stem, store, *order_structure_values(*orders)]
+        for channel in TOTAL_FUNNEL_CHANNELS:
+            impressions = total(channel, "商品曝光次数")
+            clicks = total(channel, "商品点击量")
+            sku_orders = total(channel, "SKU 订单数" if channel == "全部" else "归因 SKU 订单数")
+            output.extend([format_count(impressions), format_count(clicks), format_count(sku_orders),
+                           format_share(clicks, impressions), format_share(sku_orders, clicks)])
+        result.append(output)
+    return result
 
 
 def write_store_workbook(store: str, rows: List[ProductRow], output_path: Path) -> Path:
