@@ -27,7 +27,19 @@ cd <项目目录>
 2. 安装依赖
 
 python -m pip install --upgrade pip
+python -m pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller -i https://pypi.tuna.tsinghua.edu.cn/simple --disable-pip-version-check
+
+上面的命令使用清华大学 PyPI 镜像，适合国内网络环境。
+
+如果需要长期在此电脑打包，可将 pip 默认镜像设为清华镜像，只需执行一次：
+
+python -m pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+
+设置后，后续安装依赖可使用：
+
 python -m pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
+
+Python 3.11 本体建议从 Python 官方安装器、公司软件中心或可信内部软件源安装。不要从不明第三方下载站获取 Python 安装包。
 
 3. 检查代码
 
