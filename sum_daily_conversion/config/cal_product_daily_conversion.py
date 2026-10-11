@@ -19,9 +19,8 @@ PROJECT_ROOT = Path(os.getenv("TIKTOK_CONVERSION_ROOT", Path(__file__).resolve()
 
 
 STANDARD_COLUMNS = [
-    ("", "日期"),
+    ("", "文件名"),
     ("", "商品ID"),
-    ("", "发品状态"),
     ("全部", "GMV"),
     ("全部", "订单数"),
     ("全部", "商品成交件数"),
@@ -94,7 +93,8 @@ HEADER_SECTION_COLORS = {
 }
 
 VIDEO_SUMMARY_HEADER_GROUPS = ["", "", "", "商家视频", "联盟"]
-VIDEO_SUMMARY_HEADER_FIELDS = ["日期", "商品ID", "产品名称", "商家短视频", "联盟短视频"]
+VIDEO_SUMMARY_HEADER_FIELDS = ["文件名", "商品ID", "产品名称", "商家短视频", "联盟短视频"]
+CLICK_CONVERSION_HEADER_FIELDS = ["文件名", "店铺", "商品ID", "产品名称", "商品点击率", "商品转化率"]
 
 DEFAULT_STORE_ORDER = ["日本本土店", "日本直邮一店", "日本直邮二店", "日本跨境店"]
 DEFAULT_FLAT_STORE_NAME = "商品每日转化统计"
@@ -266,9 +266,9 @@ def first_header_index(header: List[str]) -> Dict[str, int]:
     return indexes
 
 
-def get_row_value(row: List[str], indexes: Dict[str, int], field: str, file_date: str) -> str:
-    if field == "日期":
-        return file_date
+def get_row_value(row: List[str], indexes: Dict[str, int], field: str, source_name: str) -> str:
+    if field == "文件名":
+        return source_name
     if field == "商品ID":
         return normalize_product_id(row[indexes["商品 ID"]])
     source_field = SOURCE_FIELD_NAMES.get(field, field)
@@ -304,14 +304,14 @@ def get_standard_value(
     indexes: Dict[str, int],
     group: str,
     field: str,
-    file_date: str,
+    source_name: str,
 ) -> str:
     if group and group != "全部":
         index = grouped_header_index(group_header, header, group, field)
         if index is None or index >= len(row):
             return ""
         return row[index]
-    return get_row_value(row, indexes, field, file_date)
+    return get_row_value(row, indexes, field, source_name)
 
 
 def get_required_cell(row: List[str], indexes: Dict[str, int], field: str) -> str:
@@ -441,15 +441,15 @@ def normalize_product_id(value: str) -> str:
     return str(value).strip().lstrip("'").replace("\u200b", "")
 
 
-def parse_workbook(path: Path, store: str, file_date: str, mapping: ProductMapping) -> Tuple[List[ProductRow], List[str], List[SkippedProduct]]:
+def parse_workbook(path: Path, store: str, source_name: str, mapping: ProductMapping) -> Tuple[List[ProductRow], List[str], List[SkippedProduct]]:
     rows = read_xlsx_rows(path)
-    return parse_workbook_from_rows(path, store, file_date, mapping, rows)
+    return parse_workbook_from_rows(path, store, source_name, mapping, rows)
 
 
 def parse_workbook_from_rows(
     path: Path,
     store: str,
-    file_date: str,
+    source_name: str,
     mapping: ProductMapping,
     rows: List[List[str]],
 ) -> Tuple[List[ProductRow], List[str], List[SkippedProduct]]:
@@ -461,7 +461,7 @@ def parse_workbook_from_rows(
 
     missing_fields = []
     for group, field in STANDARD_COLUMNS:
-        if field in {"日期", "商品ID"}:
+        if field in {"文件名", "商品ID"}:
             continue
         if group and group != "全部":
             if grouped_header_index(group_header, header, group, field) is None:
@@ -480,7 +480,7 @@ def parse_workbook_from_rows(
             skipped.append(SkippedProduct(store, path, product_id, product_name, skip_reason))
             continue
         values = [
-            get_standard_value(row, group_header, header, indexes, group, field, file_date)
+            get_standard_value(row, group_header, header, indexes, group, field, source_name)
             for group, field in STANDARD_COLUMNS
         ]
         parsed.append(ProductRow(store, product_id, product_name, sheet_name, values, path))
@@ -653,11 +653,11 @@ def discover_store_dirs(data_dir: Path) -> List[str]:
 
 
 def iter_input_files(data_dir: Path, store_dirs: List[str]) -> Iterable[Tuple[str, Path]]:
-    if not store_dirs:
-        for path in sorted(data_dir.glob("*.xlsx")):
-            if not path.name.startswith(("~$", ".~")):
-                yield DEFAULT_FLAT_STORE_NAME, path
-        return
+    # Root-level files are valid even when store folders also exist. They use
+    # the safe unique-mapping fallback because their path has no store identity.
+    for path in sorted(data_dir.glob("*.xlsx")):
+        if not path.name.startswith(("~$", ".~")):
+            yield DEFAULT_FLAT_STORE_NAME, path
 
     for store in store_dirs:
         store_dir = data_dir / store
@@ -677,7 +677,7 @@ def resolve_data_dir(configured_dir: Path) -> Path:
     for candidate in candidates:
         if not candidate.exists():
             continue
-        if discover_store_dirs(candidate):
+        if discover_store_dirs(candidate) or any(candidate.glob("*.xlsx")):
             return candidate
     return configured_dir
 
@@ -736,6 +736,37 @@ def write_mapping_diagnostics(mapping: ProductMapping, log_dir: Path) -> Optiona
                 ]
             )
     return path
+
+
+def build_click_conversion_summary(rows: List[ProductRow]) -> List[List[str]]:
+    """Return one comparison row per input file and product.
+
+    The source report already supplies the two requested "全部" rates. They
+    are copied as-is rather than recalculated from other fields with potentially
+    different TikTok metric definitions.
+    """
+    column_index = {(group, field): idx for idx, (group, field) in enumerate(STANDARD_COLUMNS)}
+    click_rate_idx = column_index[("全部", "商品点击率")]
+    conversion_rate_idx = column_index[("全部", "CTOR（SKU 订单）")]
+    summary: Dict[Tuple[str, str, str, str], ProductRow] = {}
+    for row in rows:
+        source_name = row.source_file.stem
+        key = (source_name, row.store, row.product_id, row.product_name)
+        # TikTok exports one row per product. Keep the latest row deterministically
+        # if a malformed source repeats the same product within one file.
+        summary[key] = row
+
+    return [
+        [
+            source_name,
+            store,
+            product_id,
+            product_name,
+            row.values[click_rate_idx],
+            row.values[conversion_rate_idx],
+        ]
+        for (source_name, store, product_id, product_name), row in sorted(summary.items())
+    ]
 
 
 def write_store_workbook(store: str, rows: List[ProductRow], output_path: Path) -> Path:
@@ -895,6 +926,16 @@ def write_store_workbook(store: str, rows: List[ProductRow], output_path: Path) 
     for row in rows:
         rows_by_product.setdefault(row.sheet_name, []).append(row)
     sheets = []
+    click_conversion_matrix = [CLICK_CONVERSION_HEADER_FIELDS, *build_click_conversion_summary(rows)]
+    sheets.append(
+        (
+            "点击转化总览",
+            click_conversion_matrix,
+            ["", "", "", "", "全部", "全部"],
+            CLICK_CONVERSION_HEADER_FIELDS,
+            1,
+        )
+    )
     summary_matrix = [VIDEO_SUMMARY_HEADER_FIELDS]
     for row in sorted(rows, key=lambda item: (item.values[0], item.sheet_name, item.product_id)):
         summary_matrix.append(
@@ -988,7 +1029,9 @@ def run_daily_conversion(config_path: str | Path = "config/config.json", env_pat
 
     if data_dir != configured_data_dir:
         print(f"[INFO] data_dir 已自动切换为：{data_dir}")
-    if not store_dirs:
+    if any(data_dir.glob("*.xlsx")):
+        print(f"[INFO] data 根目录的 Excel 按扁平模式读取，店铺标记为“{DEFAULT_FLAT_STORE_NAME}”，映射按 商品ID/商品名 回退匹配。")
+    elif not store_dirs:
         print(f"[INFO] data 下没有店铺子目录，按扁平模式读取，店铺标记为“{DEFAULT_FLAT_STORE_NAME}”，映射按 商品ID/商品名 回退匹配。")
 
     input_files = list(iter_input_files(data_dir, store_dirs))
@@ -997,10 +1040,7 @@ def run_daily_conversion(config_path: str | Path = "config/config.json", env_pat
 
     for store, path in input_files:
         rows = read_xlsx_rows(path)
-        file_date = parse_date_from_workbook(rows, default_year, date_output_format)
-        if not file_date:
-            file_date = parse_date_from_filename(path, default_year, date_output_format)
-        parsed, file_warnings, skipped = parse_workbook_from_rows(path, store, file_date, mapping, rows)
+        parsed, file_warnings, skipped = parse_workbook_from_rows(path, store, path.stem, mapping, rows)
         all_rows.extend(parsed)
         warnings.extend(file_warnings)
         skipped_products.extend(skipped)
