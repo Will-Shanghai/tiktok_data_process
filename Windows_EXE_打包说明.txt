@@ -22,7 +22,18 @@ Windows 本机手动打包
 
 打开 PowerShell，进入项目根目录：
 
-cd <项目目录>
+cd "C:\你的项目目录\tiktok_data_process"
+
+项目根目录就是同时包含以下内容的目录：
+
+main.py
+sum_daily_order
+sum_daily_conversion
+VERSION
+
+运行以下命令确认当前位置正确：
+
+dir main.py, sum_daily_order, sum_daily_conversion, VERSION
 
 2. 安装依赖
 
@@ -51,7 +62,21 @@ python -m py_compile sum_daily_conversion/config/cal_product_daily_conversion.py
 
 4. 生成 Windows EXE
 
-pyinstaller --clean --onedir --name TikTokShopDataTool_v1.1.0 --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+在上一步确认过的项目根目录执行以下 PowerShell 命令：
+
+python -m PyInstaller --clean --onedir --name TikTokShopDataTool_v1.1.0 `
+  --hidden-import sum_daily_order.config.cal_cost_return_jp_daily `
+  --hidden-import sum_daily_order.config.cal_cost_return_vn_daily `
+  --hidden-import sum_daily_order.config.cal_cost_return_mx_daily `
+  --hidden-import sum_daily_conversion.config.cal_product_daily_conversion `
+  main.py
+
+四个 hidden-import 分别对应：
+
+- 日本订单统计
+- 越南订单统计
+- 墨西哥订单统计
+- 商品每日转化统计
 
 版本号请与项目根目录 VERSION 文件保持一致。例如 VERSION 是 1.1.0，上面的名称就是 TikTokShopDataTool_v1.1.0。
 

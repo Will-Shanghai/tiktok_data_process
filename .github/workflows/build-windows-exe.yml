@@ -81,7 +81,12 @@ jobs:
       - name: Build EXE
         shell: pwsh
         run: |
-          pyinstaller --clean --onedir --name "${{ steps.version.outputs.exe_base }}" --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+          python -m PyInstaller --clean --onedir --name "${{ steps.version.outputs.exe_base }}" `
+            --hidden-import sum_daily_order.config.cal_cost_return_jp_daily `
+            --hidden-import sum_daily_order.config.cal_cost_return_vn_daily `
+            --hidden-import sum_daily_order.config.cal_cost_return_mx_daily `
+            --hidden-import sum_daily_conversion.config.cal_product_daily_conversion `
+            main.py
 
       - name: Prepare release folder
         shell: pwsh

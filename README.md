@@ -404,13 +404,13 @@ C:\Users\MAC\Desktop\tiktok_data_process
 cd /d C:\Users\MAC\Desktop\tiktok_data_process
 ```
 
-然后运行：
+确认当前目录同时包含 `main.py`、`sum_daily_order`、`sum_daily_conversion` 和 `VERSION` 后，再运行：
 
 ```bat
 py -3.11 -m venv .venv
 .venv\Scripts\activate
 pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
-pyinstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+python -m PyInstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_order.config.cal_cost_return_jp_daily --hidden-import sum_daily_order.config.cal_cost_return_vn_daily --hidden-import sum_daily_order.config.cal_cost_return_mx_daily --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 打包完成后，exe 通常在：
@@ -499,7 +499,7 @@ python main.py --site all
 
 ```bash
 pip install pyinstaller
-pyinstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+python -m PyInstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_order.config.cal_cost_return_jp_daily --hidden-import sum_daily_order.config.cal_cost_return_vn_daily --hidden-import sum_daily_order.config.cal_cost_return_mx_daily --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用。
@@ -511,7 +511,7 @@ macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用�
 新版程序会自动生成默认配置。如果你仍看到这个提示，说明你运行的是旧 exe，请重新执行：
 
 ```bat
-pyinstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+python -m PyInstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_order.config.cal_cost_return_jp_daily --hidden-import sum_daily_order.config.cal_cost_return_vn_daily --hidden-import sum_daily_order.config.cal_cost_return_mx_daily --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 ```
 
 然后重新打开：
