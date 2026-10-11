@@ -78,65 +78,18 @@ jobs:
           python -m py_compile sum_daily_order/config/cal_cost_return_mx_daily.py
           python -m py_compile sum_daily_conversion/config/cal_product_daily_conversion.py
 
-      - name: Build EXE
-        shell: pwsh
-        run: |
-          python -m PyInstaller --clean --onedir --name "${{ steps.version.outputs.exe_base }}" `
-            --hidden-import sum_daily_order.config.cal_cost_return_jp_daily `
-            --hidden-import sum_daily_order.config.cal_cost_return_vn_daily `
-            --hidden-import sum_daily_order.config.cal_cost_return_mx_daily `
-            --hidden-import sum_daily_conversion.config.cal_product_daily_conversion `
-            main.py
+      - name: Build Windows release package
+        shell: cmd
+        run: call build_windows_release.bat
 
-      - name: Prepare release folder
-        shell: pwsh
-        run: |
-          $root = "release/${{ steps.version.outputs.folder_name }}"
-
-          New-Item -ItemType Directory -Force -Path $root | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/config" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/config" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/config/cache" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_JP/local" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_JP/cross_border" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_JP/direct_old" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_JP/direct_new" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_VN/local" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_VN/cross_border" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_MX/local" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_MX/direct_old" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/data/data_MX/direct_new" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_order/result" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_conversion/config" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_conversion/data" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_conversion/result" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$root/sum_daily_conversion/result/logs" | Out-Null
-
-          if (-not (Test-Path "TikTokShopDataTool_使用说明.txt")) {
-            throw "缺少 TikTokShopDataTool_使用说明.txt。请确认该文件已提交到 Git 仓库。"
-          }
-
-          # PyInstaller --onedir puts the EXE inside dist/<exe_base>/. Copy its
-          # contents rather than its parent folder so runtime directories are
-          # true siblings of the EXE.
-          Copy-Item "dist/${{ steps.version.outputs.exe_base }}/*" "$root/" -Recurse -Force
-          Copy-Item "TikTokShopDataTool_使用说明.txt" "$root/"
-          Copy-Item "VERSION" "$root/"
-          Copy-Item "sum_daily_order/config/app_config.xlsx" "$root/sum_daily_order/config/"
-          Copy-Item "sum_daily_order/config/.env.example" "$root/config/.env.example" -Force
-          Copy-Item "sum_daily_conversion/config/config.json" "$root/sum_daily_conversion/config/" -Force
-          Copy-Item "sum_daily_conversion/config/product_sheet_mapping.csv" "$root/sum_daily_conversion/config/" -Force
-          Copy-Item "sum_daily_order/config/cache/*" "$root/sum_daily_order/config/cache/" -Force -ErrorAction SilentlyContinue
-
-      - name: Create zip package
+      - name: Locate release package
         id: package
         shell: pwsh
         run: |
           $zipPath = "release/${{ steps.version.outputs.package_name }}.zip"
-          if (Test-Path $zipPath) {
-            Remove-Item $zipPath -Force
+          if (-not (Test-Path $zipPath)) {
+            throw "一键打包脚本没有生成发布包：$zipPath"
           }
-          Compress-Archive -Path "release/${{ steps.version.outputs.folder_name }}" -DestinationPath $zipPath
           "zip_path=$zipPath" >> $env:GITHUB_OUTPUT
 
       - name: Upload build artifact

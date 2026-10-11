@@ -98,6 +98,7 @@ release\TikTokShopDataTool_v1.1.0\
 
 程序只读取发布包 EXE 同级的 config、sum_daily_order、sum_daily_conversion，不会联网下载或覆盖这两份转化配置。
 配置更新流程为：在源码目录执行 git pull，确认配置已更新，修改 VERSION，运行 build_windows_release.bat，然后分发新的 zip 发布包。
+GitHub Actions 也直接运行同一个 build_windows_release.bat，因此两种打包方式使用相同的模块、目录和配置复制规则。
 
 不要复制或提交真实 .env。
 

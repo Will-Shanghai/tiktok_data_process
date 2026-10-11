@@ -4,7 +4,7 @@ setlocal EnableExtensions DisableDelayedExpansion
 rem Build from the repository root containing this script.
 cd /d "%~dp0"
 
-for /f "usebackq tokens=* delims=" %%V in ("VERSION") do if not defined TOOL_VERSION set "TOOL_VERSION=%%V"
+for /f "usebackq tokens=* delims=" %%V in (`python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8-sig').strip())"`) do if not defined TOOL_VERSION set "TOOL_VERSION=%%V"
 if not defined TOOL_VERSION (
   echo ERROR: VERSION is missing or empty.
   exit /b 1
@@ -45,7 +45,15 @@ if errorlevel 1 goto :failed
 
 mkdir "%RELEASE_ROOT%\config" || goto :failed
 mkdir "%RELEASE_ROOT%\sum_daily_order\config\cache" || goto :failed
-mkdir "%RELEASE_ROOT%\sum_daily_order\data" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_JP\local" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_JP\cross_border" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_JP\direct_old" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_JP\direct_new" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_VN\local" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_VN\cross_border" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_MX\local" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_MX\direct_old" || goto :failed
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_MX\direct_new" || goto :failed
 mkdir "%RELEASE_ROOT%\sum_daily_order\result" || goto :failed
 mkdir "%RELEASE_ROOT%\sum_daily_conversion\config" || goto :failed
 mkdir "%RELEASE_ROOT%\sum_daily_conversion\data" || goto :failed
