@@ -38,11 +38,22 @@ mkdir "%RELEASE_ROOT%\sum_daily_conversion\result\logs"
 
 xcopy "%DIST_ROOT%\*" "%RELEASE_ROOT%\" /E /I /Y /Q >nul
 if errorlevel 1 goto failed
+
 copy /Y VERSION "%RELEASE_ROOT%\VERSION" >nul
+if errorlevel 1 goto failed
+
 copy /Y sum_daily_order\config\app_config.xlsx "%RELEASE_ROOT%\sum_daily_order\config\" >nul
+if errorlevel 1 goto failed
+
 copy /Y sum_daily_order\config\.env.example "%RELEASE_ROOT%\config\.env.example" >nul
+if errorlevel 1 goto failed
+
 copy /Y sum_daily_conversion\config\config.json "%RELEASE_ROOT%\sum_daily_conversion\config\" >nul
+if errorlevel 1 goto failed
+
 copy /Y sum_daily_conversion\config\product_sheet_mapping.csv "%RELEASE_ROOT%\sum_daily_conversion\config\" >nul
+if errorlevel 1 goto failed
+
 if exist sum_daily_order\config\cache\* xcopy sum_daily_order\config\cache\* "%RELEASE_ROOT%\sum_daily_order\config\cache\" /E /I /Y /Q >nul
 
 powershell -NoProfile -Command "Compress-Archive -Path '%RELEASE_ROOT%' -DestinationPath '%ZIP_PATH%' -Force"
@@ -55,22 +66,28 @@ exit /b 0
 :missing_version
 echo ERROR: VERSION is missing or empty.
 exit /b 1
+
 :missing_main
 echo ERROR: main.py is missing.
 exit /b 1
+
 :missing_order_config
 echo ERROR: sum_daily_order config is missing.
 exit /b 1
+
 :missing_conversion_config
 echo ERROR: sum_daily_conversion config.json is missing.
 exit /b 1
+
 :missing_mapping
 echo ERROR: product_sheet_mapping.csv is missing.
 exit /b 1
+
 :release_exists
 echo ERROR: Release directory already exists: %RELEASE_ROOT%
 echo Update VERSION or rename the existing release directory, then run again.
 exit /b 1
+
 :failed
 echo ERROR: Build failed. Check the messages above.
 exit /b 1
