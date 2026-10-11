@@ -90,11 +90,48 @@ HEADER_SECTION_COLORS = {
     "商家视频": ("FFCDEFD8", "FFF0FAF3"),
     "联盟": ("FFE1D9FF", "FFF6F2FF"),
     "商品卡": ("FFFFE1C7", "FFFFF4E8"),
+    "其他": ("FFE6E6E6", "FFF5F5F5"),
 }
 
 VIDEO_SUMMARY_HEADER_GROUPS = ["", "", "", "商家视频", "联盟"]
 VIDEO_SUMMARY_HEADER_FIELDS = ["文件名", "商品ID", "产品名称", "商家短视频", "联盟短视频"]
 CLICK_CONVERSION_HEADER_FIELDS = ["文件名", "店铺", "商品ID", "产品名称", "订单数", "商品点击率", "商品转化率"]
+ORDER_STRUCTURE_HEADER_FIELDS = [
+    "文件名",
+    "店铺",
+    "商品ID",
+    "产品名称",
+    "总订单数",
+    "商家视频订单数",
+    "商家视频占比",
+    "联盟订单数",
+    "联盟占比",
+    "商品卡订单数",
+    "商品卡占比",
+    "未归因/其他订单数",
+    "未归因/其他占比",
+    "商品点击率",
+    "商品转化率",
+]
+ORDER_STRUCTURE_HEADER_GROUPS = [
+    "", "", "", "", "全部", "商家视频", "商家视频", "联盟", "联盟", "商品卡", "商品卡", "其他", "其他", "全部", "全部",
+]
+ORDER_STRUCTURE_TOTAL_HEADER_FIELDS = [
+    "文件名",
+    "店铺",
+    "总订单数",
+    "商家视频订单数",
+    "商家视频占比",
+    "联盟订单数",
+    "联盟占比",
+    "商品卡订单数",
+    "商品卡占比",
+    "未归因/其他订单数",
+    "未归因/其他占比",
+]
+ORDER_STRUCTURE_TOTAL_HEADER_GROUPS = [
+    "", "", "全部", "商家视频", "商家视频", "联盟", "联盟", "商品卡", "商品卡", "其他", "其他",
+]
 
 DEFAULT_STORE_ORDER = ["日本本土店", "日本直邮一店", "日本直邮二店", "日本跨境店"]
 DEFAULT_FLAT_STORE_NAME = "商品每日转化统计"
@@ -806,6 +843,128 @@ def build_click_conversion_summary(rows: List[ProductRow]) -> List[List[str]]:
     ]
 
 
+def parse_count(value: str) -> Optional[int]:
+    value = str(value).strip().replace(",", "")
+    if not value:
+        return None
+    try:
+        return int(float(value))
+    except ValueError:
+        return None
+
+
+def format_count(value: Optional[int]) -> str:
+    return "" if value is None else str(value)
+
+
+def format_share(numerator: Optional[int], denominator: Optional[int]) -> str:
+    if numerator is None or denominator is None or denominator <= 0:
+        return ""
+    return f"{numerator / denominator:.2%}"
+
+
+def order_structure_values(
+    total_orders: Optional[int],
+    merchant_video_orders: Optional[int],
+    alliance_orders: Optional[int],
+    product_card_orders: Optional[int],
+) -> List[str]:
+    attributed_values = [merchant_video_orders, alliance_orders, product_card_orders]
+    other_orders: Optional[int] = None
+    if total_orders is not None and all(value is not None for value in attributed_values):
+        candidate = total_orders - sum(attributed_values)
+        if candidate >= 0:
+            other_orders = candidate
+    return [
+        format_count(total_orders),
+        format_count(merchant_video_orders),
+        format_share(merchant_video_orders, total_orders),
+        format_count(alliance_orders),
+        format_share(alliance_orders, total_orders),
+        format_count(product_card_orders),
+        format_share(product_card_orders, total_orders),
+        format_count(other_orders),
+        format_share(other_orders, total_orders),
+    ]
+
+
+def order_structure_column_indexes() -> Dict[str, int]:
+    column_index = {(group, field): idx for idx, (group, field) in enumerate(STANDARD_COLUMNS)}
+    return {
+        "total": column_index[("全部", "订单数")],
+        "merchant_video": column_index[("商家视频", "归因订单数")],
+        "alliance": column_index[("联盟", "归因订单数")],
+        "product_card": column_index[("商家商品卡", "归因订单数")],
+        "click_rate": column_index[("全部", "商品点击率")],
+        "conversion_rate": column_index[("全部", "CTOR（SKU 订单）")],
+    }
+
+
+def build_order_structure_detail(rows: List[ProductRow]) -> List[List[str]]:
+    indexes = order_structure_column_indexes()
+    summary: Dict[Tuple[str, str, str, str], ProductRow] = {}
+    for row in rows:
+        key = (row.source_file.stem, row.store, row.product_id, row.product_name)
+        summary[key] = row
+
+    def conversion_rate_sort_value(row: ProductRow) -> float:
+        value = row.values[indexes["conversion_rate"]].strip().replace(",", "")
+        if not value:
+            return -1.0
+        try:
+            return float(value[:-1]) / 100 if value.endswith("%") else float(value)
+        except ValueError:
+            return -1.0
+
+    def sort_key(item: Tuple[Tuple[str, str, str, str], ProductRow]) -> Tuple[str, float, str, str]:
+        (source_name, store, product_id, _), row = item
+        return source_name, -conversion_rate_sort_value(row), store, product_id
+
+    detail_rows = []
+    for (source_name, store, product_id, product_name), row in sorted(summary.items(), key=sort_key):
+        values = row.values
+        detail_rows.append(
+            [
+                source_name,
+                store,
+                product_id,
+                product_name,
+                *order_structure_values(
+                    parse_count(values[indexes["total"]]),
+                    parse_count(values[indexes["merchant_video"]]),
+                    parse_count(values[indexes["alliance"]]),
+                    parse_count(values[indexes["product_card"]]),
+                ),
+                values[indexes["click_rate"]],
+                values[indexes["conversion_rate"]],
+            ]
+        )
+    return detail_rows
+
+
+def build_order_structure_total(rows: List[ProductRow]) -> List[List[str]]:
+    indexes = order_structure_column_indexes()
+    totals: Dict[Tuple[str, str], List[int]] = {}
+    for row in rows:
+        counts = [
+            parse_count(row.values[indexes["total"]]),
+            parse_count(row.values[indexes["merchant_video"]]),
+            parse_count(row.values[indexes["alliance"]]),
+            parse_count(row.values[indexes["product_card"]]),
+        ]
+        if any(value is None for value in counts):
+            continue
+        key = (row.source_file.stem, row.store)
+        bucket = totals.setdefault(key, [0, 0, 0, 0])
+        for index, value in enumerate(counts):
+            bucket[index] += value
+
+    return [
+        [source_name, store, *order_structure_values(*counts)]
+        for (source_name, store), counts in sorted(totals.items())
+    ]
+
+
 def write_store_workbook(store: str, rows: List[ProductRow], output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     column_index = {(group, field): idx for idx, (group, field) in enumerate(STANDARD_COLUMNS)}
@@ -855,7 +1014,7 @@ def write_store_workbook(store: str, rows: List[ProductRow], output_path: Path) 
             )
             return style_id
 
-        for group_name in ["", "全部", "商家视频", "联盟", "商品卡"]:
+        for group_name in ["", "全部", "商家视频", "联盟", "商品卡", "其他"]:
             group_fill, field_fill = HEADER_SECTION_COLORS[group_name]
             style_ids[(group_name, "group")] = add_header_style(add_fill(group_fill))
             style_ids[(group_name, "field")] = add_header_style(add_fill(field_fill))
@@ -963,13 +1122,23 @@ def write_store_workbook(store: str, rows: List[ProductRow], output_path: Path) 
     for row in rows:
         rows_by_product.setdefault(row.sheet_name, []).append(row)
     sheets = []
-    click_conversion_matrix = [CLICK_CONVERSION_HEADER_FIELDS, *build_click_conversion_summary(rows)]
+    order_structure_total_matrix = [ORDER_STRUCTURE_TOTAL_HEADER_FIELDS, *build_order_structure_total(rows)]
+    sheets.append(
+        (
+            "出单结构总览",
+            order_structure_total_matrix,
+            ORDER_STRUCTURE_TOTAL_HEADER_GROUPS,
+            ORDER_STRUCTURE_TOTAL_HEADER_FIELDS,
+            1,
+        )
+    )
+    click_conversion_matrix = [ORDER_STRUCTURE_HEADER_FIELDS, *build_order_structure_detail(rows)]
     sheets.append(
         (
             "点击转化总览",
             click_conversion_matrix,
-            ["", "", "", "", "全部", "全部", "全部"],
-            CLICK_CONVERSION_HEADER_FIELDS,
+            ORDER_STRUCTURE_HEADER_GROUPS,
+            ORDER_STRUCTURE_HEADER_FIELDS,
             1,
         )
     )
