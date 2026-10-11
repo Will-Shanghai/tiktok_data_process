@@ -1,0 +1,126 @@
+TikTokShopDataTool Windows EXE 打包说明
+========================================
+
+推荐方式：GitHub Actions 自动打包
+------------------------------
+
+代码推送到 GitHub 的 master 分支后，仓库会在 Windows 环境自动打包。
+
+打包完成后，在 GitHub Actions 的 Artifacts 或 GitHub Release 的 Assets 中下载：
+
+TikTokShopDataTool_v<版本号>_windows.zip
+
+不要下载 Source code (zip)，那是源码包，不是可运行工具。
+
+
+Windows 本机手动打包
+-------------------
+
+1. 安装 Python 3.11
+
+安装时勾选 Add Python to PATH。
+
+打开 PowerShell，进入项目根目录：
+
+cd <项目目录>
+
+2. 安装依赖
+
+python -m pip install --upgrade pip
+python -m pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
+
+3. 检查代码
+
+python -m py_compile main.py
+python -m py_compile sum_daily_order/config/cal_cost_return_jp_daily.py
+python -m py_compile sum_daily_order/config/cal_cost_return_vn_daily.py
+python -m py_compile sum_daily_order/config/cal_cost_return_mx_daily.py
+python -m py_compile sum_daily_conversion/config/cal_product_daily_conversion.py
+
+4. 生成 Windows EXE
+
+pyinstaller --clean --onedir --name TikTokShopDataTool_v1.1.0 --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+
+版本号请与项目根目录 VERSION 文件保持一致。例如 VERSION 是 1.1.0，上面的名称就是 TikTokShopDataTool_v1.1.0。
+
+PyInstaller 会生成：
+
+dist\TikTokShopDataTool_v1.1.0\TikTokShopDataTool_v1.1.0.exe
+
+
+5. 组装给同事使用的发布目录
+
+新建一个发布目录，例如：
+
+release\TikTokShopDataTool_v1.1.0
+
+重要：把 dist\TikTokShopDataTool_v1.1.0 目录里面的所有内容复制到发布目录，不要再保留这一层同名子目录。
+
+正确目录结构如下：
+
+release\TikTokShopDataTool_v1.1.0\
+├── TikTokShopDataTool_v1.1.0.exe
+├── _internal\
+├── VERSION
+├── TikTokShopDataTool_使用说明.txt
+├── config\
+│   └── .env.example
+├── sum_daily_order\
+│   ├── config\
+│   │   ├── app_config.xlsx
+│   │   └── cache\
+│   ├── data\
+│   └── result\
+└── sum_daily_conversion\
+    ├── config\
+    │   ├── config.json
+    │   └── product_sheet_mapping.csv
+    ├── data\
+    └── result\
+
+原因：程序按 EXE 同级目录查找 config、sum_daily_order、sum_daily_conversion。
+如果把整个 dist\TikTokShopDataTool_v1.1.0 文件夹复制进发布目录，EXE 会落在更深一层，无法找到外层的业务目录。
+
+
+6. 复制业务配置文件
+
+需要复制：
+
+sum_daily_order\config\app_config.xlsx
+sum_daily_order\config\cache\（如有离线缓存）
+sum_daily_conversion\config\config.json
+sum_daily_conversion\config\product_sheet_mapping.csv
+VERSION
+TikTokShopDataTool_使用说明.txt
+
+不要复制或提交真实 .env。
+
+如订单日报需要在线读取飞书配置，使用者在 EXE 同级新建：
+
+config\.env
+
+内容格式参考：
+
+config\.env.example
+
+
+7. 首次运行后的目录
+
+首次打开 EXE 后，程序会自动创建：
+
+sum_daily_conversion\data\日本本土店
+sum_daily_conversion\data\日本跨境店
+sum_daily_conversion\data\日本直邮一店
+sum_daily_conversion\data\日本直邮二店
+
+这些店铺目录来自 product_sheet_mapping.csv 的第一列“店铺”。
+把商品数据 Excel 放到对应店铺目录，再运行“商品每日转化统计”。
+
+
+8. 打包后自检
+
+1. 双击 EXE，确认没有在 EXE 同级创建顶层 data 或 result。
+2. 确认 sum_daily_conversion\data 下自动创建店铺目录。
+3. 把一份商品数据 Excel 放进对应店铺目录后运行转化统计。
+4. 确认 sum_daily_conversion\result 中生成结果 Excel。
+5. 确认结果 Excel 包含“出单结构总览”和“点击转化总览”。
