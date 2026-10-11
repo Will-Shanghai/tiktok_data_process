@@ -16,6 +16,17 @@ TikTokShopDataTool_v<版本号>_windows.zip
 Windows 本机手动打包
 -------------------
 
+转化配置自动补齐：新版程序启动时，如果 EXE 同级的
+sum_daily_conversion/config/config.json 或 product_sheet_mapping.csv 缺失，
+会先尝试从 Gitee master 下载，失败后尝试 GitHub master。
+下载内容通过 JSON/CSV 格式校验后保存，再按映射表创建 data 下的店铺目录。
+已有配置不会被自动覆盖，网络不可用时仍可使用已有配置。
+此功能只获取上述两个公共配置文件，不下载 config/.env、凭证、缓存或业务数据。
+仓库更新不会自动覆盖本地文件；如需重新获取，请先将需要更新的本地文件改名备份，
+再启动程序。自定义 mapping_file 路径不会被远端默认映射替代。
+首次使用需要能访问至少一个仓库；均不可访问时会提示手动复制的目标路径。
+旧版 EXE 需要重新打包才能获得此功能。
+
 1. 安装 Python 3.11
 
 安装时勾选 Add Python to PATH。

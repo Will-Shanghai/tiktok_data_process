@@ -210,9 +210,10 @@ def ensure_conversion_runtime_dirs():
     for folder in ["config", "data", "result", "result/logs"]:
         (conversion_root / folder).mkdir(parents=True, exist_ok=True)
 
+    from conversion_config_download import ensure_conversion_configs
+
+    ensure_conversion_configs(conversion_root)
     conversion_config = conversion_root / "config" / "config.json"
-    if not conversion_config.exists():
-        return []
 
     os.environ["TIKTOK_CONVERSION_ROOT"] = str(conversion_root)
     from sum_daily_conversion.config.cal_product_daily_conversion import initialize_data_store_dirs

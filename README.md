@@ -506,6 +506,15 @@ macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用�
 
 ## 常见问题
 
+### EXE 提示缺少转化配置或 product_sheet_mapping.csv
+
+新版启动时自动补齐 `sum_daily_conversion/config/config.json` 和默认映射
+`sum_daily_conversion/config/product_sheet_mapping.csv`：先尝试 Gitee master，失败后尝试 GitHub master，
+校验格式后保存，并按映射创建店铺目录。已有配置不覆盖，因此可以离线使用。
+如需获取仓库新版，先将要更新的本地文件改名备份，再启动；自定义映射路径需自行维护。
+只下载这两个公共配置，不下载 `.env`、凭证或业务数据。两个仓库都无法访问时会提示手动复制路径。
+旧 EXE 需要重新打包。
+
 ### 双击后提示找不到 app_config.xlsx
 
 新版程序会自动生成默认配置。如果你仍看到这个提示，说明你运行的是旧 exe，请重新执行：
