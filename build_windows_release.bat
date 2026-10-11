@@ -4,7 +4,7 @@ setlocal EnableExtensions DisableDelayedExpansion
 rem Build from the repository root containing this script.
 cd /d "%~dp0"
 
-for /f "usebackq tokens=* delims=" %%V in (`python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8-sig').strip())"`) do if not defined TOOL_VERSION set "TOOL_VERSION=%%V"
+set /p "TOOL_VERSION=" < "VERSION"
 if not defined TOOL_VERSION (
   echo ERROR: VERSION is missing or empty.
   exit /b 1
@@ -17,11 +17,11 @@ set "ZIP_PATH=release\%EXE_BASE%_windows.zip"
 set "USAGE_GUIDE="
 
 rem Avoid a hard-coded Chinese file name because CMD code pages differ by Windows setup.
-for %%F in (TikTokShopDataTool_*.txt) do if not defined USAGE_GUIDE set "USAGE_GUIDE=%%~fF"
-if not defined USAGE_GUIDE (
+if not exist "TikTokShopDataTool_*.txt" (
   echo ERROR: The TikTokShopDataTool usage guide (*.txt) is missing.
   exit /b 1
 )
+for %%F in (TikTokShopDataTool_*.txt) do set "USAGE_GUIDE=%%~fF"
 
 for %%F in (
   "main.py"
