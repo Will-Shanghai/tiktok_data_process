@@ -91,13 +91,7 @@ sum_daily_order\data\data_MX\direct_old - 墨西哥直邮一店
 sum_daily_order\data\data_MX\direct_new - 墨西哥直邮二店
 ```
 
-商品每日转化统计的 Excel 文件放到：
-
-```
-sum_daily_conversion\data
-```
-
-也可以按店铺建立子目录。根目录和店铺子目录中的 Excel 都会被读取：
+商品每日转化统计会在首次启动时，依据 `sum_daily_conversion\config\product_sheet_mapping.csv` 第一列“店铺”自动创建店铺目录。请把 Excel 放到对应店铺目录：
 
 ```
 sum_daily_conversion\data\日本本土店
@@ -105,6 +99,14 @@ sum_daily_conversion\data\日本跨境店
 sum_daily_conversion\data\日本直邮一店
 sum_daily_conversion\data\日本直邮二店
 ```
+
+映射表必须有以下列：
+
+```
+店铺,商品ID,商品名称
+```
+
+“商品名称”会作为结果中的产品名称和本地结果 Sheet 名。根目录 `sum_daily_conversion\data` 下的 Excel 仍可读取，但没有店铺身份时只能按唯一商品映射回退，建议优先放入对应店铺目录。
 
 文件放错目录，程序就会按错店铺算。
 

@@ -382,13 +382,13 @@ class ProductMapping:
             entry.match_count += 1
             entry.match_modes.add(mode)
 
-    def resolve(self, store: str, product_id: str, product_name: str) -> Tuple[Optional[str], str]:
-        """返回 (飞书sheet名, 跳过原因)。匹配成功时原因为空字符串。"""
+    def resolve(self, store: str, product_id: str, product_name: str) -> Tuple[Optional[MappingEntry], str]:
+        """返回 (映射记录, 跳过原因)。匹配成功时原因为空字符串。"""
         if product_id:
             entry = self._by_store_id.get((store, product_id))
             if entry is not None:
                 self._count([entry], "精确(店铺+商品ID)")
-                return entry.sheet_name, ""
+                return entry, ""
 
         # 店铺是映射表里已知的真实店铺，但该商品没配置 → 就是真的没配，不做跨店铺回退。
         if self.is_known_store(store):
@@ -407,7 +407,7 @@ class ProductMapping:
             distinct = sorted({item.sheet_name for item in candidates})
             if len(distinct) == 1:
                 self._count(candidates, f"{label}回退")
-                return distinct[0], ""
+                return candidates[0], ""
             detail = ", ".join(f"{item.store}={item.sheet_name}" for item in candidates)
             return None, f"映射歧义：{label} 对应多个不同 sheet（{detail}），请拆分数据目录或调整映射表"
         return None, "未配置映射"
@@ -417,15 +417,17 @@ def load_mapping(path: Path) -> ProductMapping:
     mapping = ProductMapping()
     with path.open("r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
-        required = {"店铺", "商品ID", "飞书sheet名"}
-        if not required.issubset(reader.fieldnames or []):
-            raise ValueError("映射表必须包含列：店铺, 商品ID, 飞书sheet名")
+        fieldnames = set(reader.fieldnames or [])
+        required = {"店铺", "商品ID"}
+        name_column = next((name for name in ("商品名称", "商品名", "飞书sheet名") if name in fieldnames), None)
+        if not required.issubset(fieldnames) or not name_column:
+            raise ValueError("映射表必须包含列：店铺, 商品ID, 商品名称（旧版可使用 商品名 或 飞书sheet名）")
         for row in reader:
             store = (row.get("店铺") or "").strip()
             product_id = normalize_product_id(row.get("商品ID") or "")
-            product_name = (row.get("商品名") or "").strip()
-            sheet_name = (row.get("飞书sheet名") or "").strip()
-            if not store or not sheet_name:
+            product_name = (row.get(name_column) or "").strip()
+            sheet_name = (row.get("飞书sheet名") or product_name).strip()
+            if not store or not product_name or not sheet_name:
                 continue
             if not product_id and not product_name:
                 continue
@@ -473,17 +475,17 @@ def parse_workbook_from_rows(
         warnings.append(f"{path.name} 缺少字段：{', '.join(missing_fields)}")
 
     for row in data_rows:
-        product_name = get_required_cell(row, indexes, "商品名")
+        source_product_name = get_required_cell(row, indexes, "商品名")
         product_id = normalize_product_id(get_required_cell(row, indexes, "商品 ID"))
-        sheet_name, skip_reason = mapping.resolve(store, product_id, product_name)
-        if not sheet_name:
-            skipped.append(SkippedProduct(store, path, product_id, product_name, skip_reason))
+        mapping_entry, skip_reason = mapping.resolve(store, product_id, source_product_name)
+        if not mapping_entry:
+            skipped.append(SkippedProduct(store, path, product_id, source_product_name, skip_reason))
             continue
         values = [
             get_standard_value(row, group_header, header, indexes, group, field, source_name)
             for group, field in STANDARD_COLUMNS
         ]
-        parsed.append(ProductRow(store, product_id, product_name, sheet_name, values, path))
+        parsed.append(ProductRow(store, product_id, mapping_entry.product_name, mapping_entry.sheet_name, values, path))
     return parsed, warnings, skipped
 
 
@@ -650,6 +652,21 @@ def discover_store_dirs(data_dir: Path) -> List[str]:
     ordered = [store for store in DEFAULT_STORE_ORDER if store in stores]
     extras = sorted(store for store in stores if store not in DEFAULT_STORE_ORDER)
     return ordered + extras
+
+
+def ensure_store_dirs(data_dir: Path, mapping: ProductMapping) -> List[str]:
+    """Create one input directory for each store declared in the mapping file."""
+    data_dir.mkdir(parents=True, exist_ok=True)
+    created = []
+    for store in sorted(mapping.stores):
+        store_path = Path(store)
+        if store_path.name != store or store in {"", ".", ".."}:
+            raise ValueError(f"映射表中的店铺目录名不安全：{store!r}")
+        target = data_dir / store
+        if not target.exists():
+            target.mkdir()
+            created.append(store)
+    return created
 
 
 def iter_input_files(data_dir: Path, store_dirs: List[str]) -> Iterable[Tuple[str, Path]]:
@@ -994,7 +1011,7 @@ def write_store_workbook(store: str, rows: List[ProductRow], output_path: Path) 
 
 def write_local_excels_by_store(rows: List[ProductRow], output_dir: Path, store_dirs: List[str]) -> List[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    target_stores = list(store_dirs)
+    target_stores = []
     for row in rows:
         if row.store not in target_stores:
             target_stores.append(row.store)
@@ -1009,12 +1026,19 @@ def write_local_excels_by_store(rows: List[ProductRow], output_dir: Path, store_
     return output_paths
 
 
+def initialize_data_store_dirs(config_path: str | Path = "config/config.json") -> List[str]:
+    """Create data/<店铺> folders from product_sheet_mapping.csv before input files arrive."""
+    config = load_config(resolve_project_path(config_path))
+    data_dir = resolve_project_path(config.get("data_dir", "data"))
+    mapping_file = resolve_project_path(config.get("mapping_file", "mapping/product_sheet_mapping.csv"))
+    return ensure_store_dirs(data_dir, load_mapping(mapping_file))
+
+
 def run_daily_conversion(config_path: str | Path = "config/config.json", env_path: str | Path = "config/.env", dry_run: bool = False) -> int:
     config = load_config(resolve_project_path(config_path))
     load_env(resolve_project_path(env_path))
     configured_data_dir = resolve_project_path(config.get("data_dir", "data"))
     data_dir = resolve_data_dir(configured_data_dir)
-    store_dirs = discover_store_dirs(data_dir)
     mapping_file = resolve_project_path(config.get("mapping_file", "mapping/product_sheet_mapping.csv"))
     log_dir = resolve_project_path(config.get("log_dir", "outputs/logs"))
     output_dir = resolve_project_path(config.get("output_dir", "outputs/daily_convarsion_data"))
@@ -1023,12 +1047,16 @@ def run_daily_conversion(config_path: str | Path = "config/config.json", env_pat
     date_output_format = config.get("date_output_format", "mdd")
 
     mapping = load_mapping(mapping_file)
+    created_store_dirs = ensure_store_dirs(data_dir, mapping)
+    store_dirs = discover_store_dirs(data_dir)
     all_rows: List[ProductRow] = []
     warnings: List[str] = []
     skipped_products: List[SkippedProduct] = []
 
     if data_dir != configured_data_dir:
         print(f"[INFO] data_dir 已自动切换为：{data_dir}")
+    if created_store_dirs:
+        print(f"[INFO] 已按映射表创建店铺目录：{', '.join(created_store_dirs)}")
     if any(data_dir.glob("*.xlsx")):
         print(f"[INFO] data 根目录的 Excel 按扁平模式读取，店铺标记为“{DEFAULT_FLAT_STORE_NAME}”，映射按 商品ID/商品名 回退匹配。")
     elif not store_dirs:

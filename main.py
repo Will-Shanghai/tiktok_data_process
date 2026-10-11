@@ -204,6 +204,22 @@ def get_public_config_root():
     return Path(__file__).resolve().parent / "config"
 
 
+def ensure_conversion_runtime_dirs():
+    """Create conversion runtime folders, including stores declared in its mapping CSV."""
+    conversion_root = get_conversion_runtime_root()
+    for folder in ["config", "data", "result", "result/logs"]:
+        (conversion_root / folder).mkdir(parents=True, exist_ok=True)
+
+    conversion_config = conversion_root / "config" / "config.json"
+    if not conversion_config.exists():
+        return []
+
+    os.environ["TIKTOK_CONVERSION_ROOT"] = str(conversion_root)
+    from sum_daily_conversion.config.cal_product_daily_conversion import initialize_data_store_dirs
+
+    return initialize_data_store_dirs(conversion_config)
+
+
 APP_ROOT = get_runtime_root()
 CONFIG_PATH = APP_ROOT / "config" / "app_config.xlsx"
 
@@ -417,8 +433,7 @@ def run(site):
 
 def run_conversion(dry_run=False):
     conversion_root = get_conversion_runtime_root()
-    for folder in ["config", "data", "result", "result/logs"]:
-        (conversion_root / folder).mkdir(parents=True, exist_ok=True)
+    ensure_conversion_runtime_dirs()
 
     os.environ["TIKTOK_CONVERSION_ROOT"] = str(conversion_root)
     os.environ["TIKTOK_REPORT_VERSION"] = APP_VERSION
@@ -438,6 +453,12 @@ def main():
     # Create the user-writable public config directory before showing the menu.
     # It is intentionally empty: real .env credentials must be supplied locally.
     get_public_config_root().mkdir(parents=True, exist_ok=True)
+    try:
+        created_store_dirs = ensure_conversion_runtime_dirs()
+        if created_store_dirs:
+            startup_log(f"已创建转化统计店铺目录: {', '.join(created_store_dirs)}")
+    except Exception as exc:
+        startup_log(f"转化统计目录初始化失败，将在运行转化统计时提示详情: {exc}")
     parser = argparse.ArgumentParser(description="TikTok Shop data tool launcher")
     parser.add_argument("--site", choices=["JP", "VN", "MX", "all"], help="直接运行指定站点")
     parser.add_argument("--task", choices=["order", "conversion", "all"], help="直接运行指定功能")
