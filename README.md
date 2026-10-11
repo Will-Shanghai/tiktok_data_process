@@ -404,25 +404,25 @@ C:\Users\MAC\Desktop\tiktok_data_process
 cd /d C:\Users\MAC\Desktop\tiktok_data_process
 ```
 
-确认当前目录同时包含 `main.py`、`sum_daily_order`、`sum_daily_conversion` 和 `VERSION` 后，再运行：
+确认当前目录同时包含 `main.py`、`sum_daily_order`、`sum_daily_conversion`、`VERSION` 与 `build_windows_release.bat` 后，再运行：
 
 ```bat
-py -3.11 -m venv .venv
-.venv\Scripts\activate
 pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstaller
-python -m PyInstaller --clean --onedir --name TikTokShopDataTool_v<版本号> --hidden-import sum_daily_order.config.cal_cost_return_jp_daily --hidden-import sum_daily_order.config.cal_cost_return_vn_daily --hidden-import sum_daily_order.config.cal_cost_return_mx_daily --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+build_windows_release.bat
 ```
 
-打包完成后，exe 通常在：
+脚本会从 `VERSION` 读取版本号，自动打包四个业务模块，复制订单和转化配置，并生成给同事分发的完整 ZIP：
 
 ```text
-dist/TikTokShopDataTool_v<版本号>.exe
+release/TikTokShopDataTool_v<版本号>_windows.zip
 ```
 
-然后在 `dist` 里补齐外部目录：
+不要把 `dist` 中的 EXE 单独发给同事。配置更新时在源码目录执行 `git pull`，确认配置文件已更新，修改 `VERSION` 后重新运行该脚本并分发新的 ZIP 包。
+
+解压 ZIP 后的目录为：
 
 ```text
-dist/
+release/TikTokShopDataTool_v<版本号>/
 └── TikTokShopDataTool_v<版本号>/
     ├── TikTokShopDataTool_v<版本号>.exe
     ├── _internal/
@@ -430,15 +430,7 @@ dist/
     └── sum_daily_conversion/
 ```
 
-程序第一次启动时，如果发现没有：
-
-```text
-dist/sum_daily_order/config/app_config.xlsx
-```
-
-会自动生成一个默认配置文件。所以 `app_config.xlsx` 不一定必须手动复制，但建议你确认里面的 `enabled` 和店铺目录是否符合实际。
-
-GitHub Actions 自动打包出来的 Release 包会自带：
+GitHub Actions 自动打包出来的 Release 包也会自带：
 
 ```text
 config/.env.example
@@ -470,12 +462,12 @@ MEXICO_EXCHANGE_RATE=0.000000
 如果 exe 目录下没有 `config/.env`，就必须准备：
 
 ```text
-dist/sum_daily_order/config/cache/
+release/TikTokShopDataTool_v<版本号>/sum_daily_order/config/cache/
 ```
 
 否则程序会提示无法读取 SKU 成本配置。
 
-订单 CSV 不建议随 exe 打包，日常使用时直接放到 `dist/sum_daily_order/data/` 下对应店铺目录。
+订单 CSV 不建议随 exe 打包，日常使用时直接放到解压后的 `sum_daily_order/data/` 下对应店铺目录。
 
 最终同事只需要：
 
@@ -508,12 +500,8 @@ macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用�
 
 ### EXE 提示缺少转化配置或 product_sheet_mapping.csv
 
-新版启动时自动补齐 `sum_daily_conversion/config/config.json` 和默认映射
-`sum_daily_conversion/config/product_sheet_mapping.csv`：先尝试 Gitee master，失败后尝试 GitHub master，
-校验格式后保存，并按映射创建店铺目录。已有配置不覆盖，因此可以离线使用。
-如需获取仓库新版，先将要更新的本地文件改名备份，再启动；自定义映射路径需自行维护。
-只下载这两个公共配置，不下载 `.env`、凭证或业务数据。两个仓库都无法访问时会提示手动复制路径。
-旧 EXE 需要重新打包。
+说明发布包不完整。应从 `release/TikTokShopDataTool_v<版本号>_windows.zip` 完整解压后运行，不能只复制 EXE 文件。
+配置更新由打包人员在源码目录执行 `git pull` 后重新运行 `build_windows_release.bat`，再分发新版 ZIP；EXE 不会在运行时联网下载配置。
 
 ### 双击后提示找不到 app_config.xlsx
 
@@ -551,7 +539,7 @@ config/.env
 打包后对应路径是：
 
 ```text
-dist/config/.env
+release/TikTokShopDataTool_v<版本号>/config/.env
 ```
 
 也就是把源码里的：
@@ -563,7 +551,7 @@ config/.env
 整个复制到：
 
 ```text
-dist/config/.env
+release/TikTokShopDataTool_v<版本号>/config/.env
 ```
 
 ### pip install 最后出现一大段 Traceback
@@ -594,7 +582,7 @@ WARNING: Library not found: could not resolve 'VERSION.dll'
 这类 warning 不一定代表失败。只要最后生成了：
 
 ```text
-dist/TikTokShopDataTool_v1.1.0.exe
+release/TikTokShopDataTool_v1.1.0/TikTokShopDataTool_v1.1.0.exe
 ```
 
 并且双击能启动，就可以继续测试。真正需要处理的是运行 exe 后出现的业务报错，例如配置文件、数据目录、飞书缓存缺失等。

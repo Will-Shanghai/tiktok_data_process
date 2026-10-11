@@ -16,22 +16,11 @@ TikTokShopDataTool_v<版本号>_windows.zip
 Windows 本机手动打包
 -------------------
 
-转化配置自动补齐：新版程序启动时，如果 EXE 同级的
-sum_daily_conversion/config/config.json 或 product_sheet_mapping.csv 缺失，
-会先尝试从 Gitee master 下载，失败后尝试 GitHub master。
-下载内容通过 JSON/CSV 格式校验后保存，再按映射表创建 data 下的店铺目录。
-已有配置不会被自动覆盖，网络不可用时仍可使用已有配置。
-此功能只获取上述两个公共配置文件，不下载 config/.env、凭证、缓存或业务数据。
-仓库更新不会自动覆盖本地文件；如需重新获取，请先将需要更新的本地文件改名备份，
-再启动程序。自定义 mapping_file 路径不会被远端默认映射替代。
-首次使用需要能访问至少一个仓库；均不可访问时会提示手动复制的目标路径。
-旧版 EXE 需要重新打包才能获得此功能。
-
 1. 安装 Python 3.11
 
 安装时勾选 Add Python to PATH。
 
-打开 PowerShell，进入项目根目录：
+打开 CMD 或 PowerShell，进入项目根目录：
 
 cd "C:\你的项目目录\tiktok_data_process"
 
@@ -63,48 +52,29 @@ python -m pip install pandas requests python-dotenv openpyxl xlsxwriter pyinstal
 
 Python 3.11 本体建议从 Python 官方安装器、公司软件中心或可信内部软件源安装。不要从不明第三方下载站获取 Python 安装包。
 
-3. 检查代码
+3. 一键生成发布包
 
-python -m py_compile main.py
-python -m py_compile sum_daily_order/config/cal_cost_return_jp_daily.py
-python -m py_compile sum_daily_order/config/cal_cost_return_vn_daily.py
-python -m py_compile sum_daily_order/config/cal_cost_return_mx_daily.py
-python -m py_compile sum_daily_conversion/config/cal_product_daily_conversion.py
+在项目根目录双击或在 CMD 中执行：
 
-4. 生成 Windows EXE
+build_windows_release.bat
 
-在上一步确认过的项目根目录执行以下 PowerShell 命令：
+脚本会自动打包日本、越南、墨西哥订单统计和商品每日转化四个模块，并复制当前源码中的：
 
-python -m PyInstaller --clean --onedir --name TikTokShopDataTool_v1.1.0 `
-  --hidden-import sum_daily_order.config.cal_cost_return_jp_daily `
-  --hidden-import sum_daily_order.config.cal_cost_return_vn_daily `
-  --hidden-import sum_daily_order.config.cal_cost_return_mx_daily `
-  --hidden-import sum_daily_conversion.config.cal_product_daily_conversion `
-  main.py
+- sum_daily_order\config\app_config.xlsx
+- sum_daily_order\config\cache\（如有离线缓存）
+- sum_daily_conversion\config\config.json
+- sum_daily_conversion\config\product_sheet_mapping.csv
+- VERSION 和使用说明
 
-四个 hidden-import 分别对应：
+最终生成可分发的压缩包：
 
-- 日本订单统计
-- 越南订单统计
-- 墨西哥订单统计
-- 商品每日转化统计
+release\TikTokShopDataTool_v<版本号>_windows.zip
 
-版本号请与项目根目录 VERSION 文件保持一致。例如 VERSION 是 1.1.0，上面的名称就是 TikTokShopDataTool_v1.1.0。
+不要单独分发 dist 目录中的 EXE；请把这个 zip 包发送给同事，由同事完整解压后运行。
 
-PyInstaller 会生成：
+脚本从 VERSION 读取版本号。如果同版本的 release\TikTokShopDataTool_v<版本号> 已存在，脚本会停止，避免覆盖其中的 .env、输入数据或报表。更新 VERSION 后重新运行即可生成新的发布包。
 
-dist\TikTokShopDataTool_v1.1.0\TikTokShopDataTool_v1.1.0.exe
-
-
-5. 组装给同事使用的发布目录
-
-新建一个发布目录，例如：
-
-release\TikTokShopDataTool_v1.1.0
-
-重要：把 dist\TikTokShopDataTool_v1.1.0 目录里面的所有内容复制到发布目录，不要再保留这一层同名子目录。
-
-正确目录结构如下：
+发布包解压后的目录结构如下：
 
 release\TikTokShopDataTool_v1.1.0\
 ├── TikTokShopDataTool_v1.1.0.exe
@@ -126,20 +96,8 @@ release\TikTokShopDataTool_v1.1.0\
     ├── data\
     └── result\
 
-原因：程序按 EXE 同级目录查找 config、sum_daily_order、sum_daily_conversion。
-如果把整个 dist\TikTokShopDataTool_v1.1.0 文件夹复制进发布目录，EXE 会落在更深一层，无法找到外层的业务目录。
-
-
-6. 复制业务配置文件
-
-需要复制：
-
-sum_daily_order\config\app_config.xlsx
-sum_daily_order\config\cache\（如有离线缓存）
-sum_daily_conversion\config\config.json
-sum_daily_conversion\config\product_sheet_mapping.csv
-VERSION
-TikTokShopDataTool_使用说明.txt
+程序只读取发布包 EXE 同级的 config、sum_daily_order、sum_daily_conversion，不会联网下载或覆盖这两份转化配置。
+配置更新流程为：在源码目录执行 git pull，确认配置已更新，修改 VERSION，运行 build_windows_release.bat，然后分发新的 zip 发布包。
 
 不要复制或提交真实 .env。
 
@@ -152,7 +110,7 @@ config\.env
 config\.env.example
 
 
-7. 首次运行后的目录
+4. 首次运行后的目录
 
 首次打开 EXE 后，程序会自动创建：
 
@@ -165,7 +123,7 @@ sum_daily_conversion\data\日本直邮二店
 把商品数据 Excel 放到对应店铺目录，再运行“商品每日转化统计”。
 
 
-8. 打包后自检
+5. 打包后自检
 
 1. 双击 EXE，确认没有在 EXE 同级创建顶层 data 或 result。
 2. 确认 sum_daily_conversion\data 下自动创建店铺目录。
