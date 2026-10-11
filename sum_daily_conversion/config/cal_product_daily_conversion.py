@@ -94,7 +94,7 @@ HEADER_SECTION_COLORS = {
 
 VIDEO_SUMMARY_HEADER_GROUPS = ["", "", "", "商家视频", "联盟"]
 VIDEO_SUMMARY_HEADER_FIELDS = ["文件名", "商品ID", "产品名称", "商家短视频", "联盟短视频"]
-CLICK_CONVERSION_HEADER_FIELDS = ["文件名", "店铺", "商品ID", "产品名称", "商品点击率", "商品转化率"]
+CLICK_CONVERSION_HEADER_FIELDS = ["文件名", "店铺", "商品ID", "产品名称", "订单数", "商品点击率", "商品转化率"]
 
 DEFAULT_STORE_ORDER = ["日本本土店", "日本直邮一店", "日本直邮二店", "日本跨境店"]
 DEFAULT_FLAT_STORE_NAME = "商品每日转化统计"
@@ -763,6 +763,7 @@ def build_click_conversion_summary(rows: List[ProductRow]) -> List[List[str]]:
     different TikTok metric definitions.
     """
     column_index = {(group, field): idx for idx, (group, field) in enumerate(STANDARD_COLUMNS)}
+    order_count_idx = column_index[("全部", "订单数")]
     click_rate_idx = column_index[("全部", "商品点击率")]
     conversion_rate_idx = column_index[("全部", "CTOR（SKU 订单）")]
     summary: Dict[Tuple[str, str, str, str], ProductRow] = {}
@@ -773,16 +774,35 @@ def build_click_conversion_summary(rows: List[ProductRow]) -> List[List[str]]:
         # if a malformed source repeats the same product within one file.
         summary[key] = row
 
+    def conversion_rate_sort_value(row: ProductRow) -> float:
+        value = row.values[conversion_rate_idx].strip().replace(",", "")
+        if not value:
+            return -1.0
+        try:
+            return float(value[:-1]) / 100 if value.endswith("%") else float(value)
+        except ValueError:
+            return -1.0
+
+    sorted_entries = sorted(
+        summary.items(),
+        key=lambda item: (
+            item[0][0],
+            -conversion_rate_sort_value(item[1]),
+            item[0][1],
+            item[0][2],
+        ),
+    )
     return [
         [
             source_name,
             store,
             product_id,
             product_name,
+            row.values[order_count_idx],
             row.values[click_rate_idx],
             row.values[conversion_rate_idx],
         ]
-        for (source_name, store, product_id, product_name), row in sorted(summary.items())
+        for (source_name, store, product_id, product_name), row in sorted_entries
     ]
 
 
@@ -948,7 +968,7 @@ def write_store_workbook(store: str, rows: List[ProductRow], output_path: Path) 
         (
             "点击转化总览",
             click_conversion_matrix,
-            ["", "", "", "", "全部", "全部"],
+            ["", "", "", "", "全部", "全部", "全部"],
             CLICK_CONVERSION_HEADER_FIELDS,
             1,
         )

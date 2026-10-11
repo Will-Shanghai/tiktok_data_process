@@ -129,7 +129,7 @@ sum_daily_conversion\data\日本直邮二店
 
 订单日报结果会放在 `sum_daily_order\result` 文件夹里。
 
-商品每日转化统计结果会放在 `sum_daily_conversion\result` 文件夹里。每个结果文件新增“点击转化总览”Sheet，按源文件和商品展示“全部”口径的商品点击率、商品转化率，用于产品间比较。
+商品每日转化统计结果会放在 `sum_daily_conversion\result` 文件夹里。每个结果文件新增“点击转化总览”Sheet，按源文件和商品展示“全部”口径的订单数、商品点击率、商品转化率；同一文件名内按商品转化率从高到低排列。
 
 文件名一般会包含：
 
