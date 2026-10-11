@@ -14,13 +14,20 @@ set "EXE_BASE=TikTokShopDataTool_v%TOOL_VERSION%"
 set "DIST_ROOT=dist\%EXE_BASE%"
 set "RELEASE_ROOT=release\%EXE_BASE%"
 set "ZIP_PATH=release\%EXE_BASE%_windows.zip"
+set "USAGE_GUIDE="
+
+rem Avoid a hard-coded Chinese file name because CMD code pages differ by Windows setup.
+for %%F in (TikTokShopDataTool_*.txt) do if not defined USAGE_GUIDE set "USAGE_GUIDE=%%~fF"
+if not defined USAGE_GUIDE (
+  echo ERROR: The TikTokShopDataTool usage guide (*.txt) is missing.
+  exit /b 1
+)
 
 for %%F in (
   "main.py"
   "sum_daily_order\config\app_config.xlsx"
   "sum_daily_conversion\config\config.json"
   "sum_daily_conversion\config\product_sheet_mapping.csv"
-  "TikTokShopDataTool_使用说明.txt"
 ) do (
   if not exist %%F (
     echo ERROR: Required file is missing: %%~F
@@ -61,7 +68,7 @@ mkdir "%RELEASE_ROOT%\sum_daily_conversion\result\logs" || goto :failed
 
 xcopy "%DIST_ROOT%\*" "%RELEASE_ROOT%\" /E /I /Y /Q >nul || goto :failed
 copy /Y "VERSION" "%RELEASE_ROOT%\VERSION" >nul || goto :failed
-copy /Y "TikTokShopDataTool_使用说明.txt" "%RELEASE_ROOT%\" >nul || goto :failed
+copy /Y "%USAGE_GUIDE%" "%RELEASE_ROOT%\" >nul || goto :failed
 copy /Y "sum_daily_order\config\app_config.xlsx" "%RELEASE_ROOT%\sum_daily_order\config\" >nul || goto :failed
 copy /Y "sum_daily_order\config\.env.example" "%RELEASE_ROOT%\config\.env.example" >nul || goto :failed
 copy /Y "sum_daily_conversion\config\config.json" "%RELEASE_ROOT%\sum_daily_conversion\config\" >nul || goto :failed
