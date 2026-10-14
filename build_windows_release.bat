@@ -13,7 +13,7 @@ set ZIP_PATH=release\%EXE_BASE%_windows.zip
 if not exist main.py goto missing_main
 if not exist sum_daily_order\config\app_config.xlsx goto missing_order_config
 if not exist sum_daily_conversion\config\config.json goto missing_conversion_config
-if not exist sum_daily_conversion\config\product_sheet_mapping.csv goto missing_mapping
+if not exist sum_daily_conversion\config\product_sheet_mapping.xlsx goto missing_mapping
 if exist "%RELEASE_ROOT%" goto release_exists
 
 echo Building %EXE_BASE% ...
@@ -51,7 +51,7 @@ if errorlevel 1 goto failed
 copy /Y sum_daily_conversion\config\config.json "%RELEASE_ROOT%\sum_daily_conversion\config\" >nul
 if errorlevel 1 goto failed
 
-copy /Y sum_daily_conversion\config\product_sheet_mapping.csv "%RELEASE_ROOT%\sum_daily_conversion\config\" >nul
+copy /Y sum_daily_conversion\config\product_sheet_mapping.xlsx "%RELEASE_ROOT%\sum_daily_conversion\config\" >nul
 if errorlevel 1 goto failed
 
 if exist sum_daily_order\config\cache\* xcopy sum_daily_order\config\cache\* "%RELEASE_ROOT%\sum_daily_order\config\cache\" /E /I /Y /Q >nul
@@ -80,7 +80,7 @@ echo ERROR: sum_daily_conversion config.json is missing.
 exit /b 1
 
 :missing_mapping
-echo ERROR: product_sheet_mapping.csv is missing.
+echo ERROR: product_sheet_mapping.xlsx is missing.
 exit /b 1
 
 :release_exists

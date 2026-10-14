@@ -91,7 +91,7 @@ sum_daily_order\data\data_MX\direct_old - 墨西哥直邮一店
 sum_daily_order\data\data_MX\direct_new - 墨西哥直邮二店
 ```
 
-商品每日转化统计会在首次启动时，依据 `sum_daily_conversion\config\product_sheet_mapping.csv` 第一列“店铺”自动创建店铺目录。请把 Excel 放到对应店铺目录：
+商品每日转化统计会在首次启动时，依据 `sum_daily_conversion\config\product_sheet_mapping.xlsx` 第一列“店铺”自动创建店铺目录。请把 Excel 放到对应店铺目录：
 
 ```
 sum_daily_conversion\data\日本本土店
@@ -107,6 +107,8 @@ sum_daily_conversion\data\日本直邮二店
 ```
 
 “商品名称”会作为结果中的产品名称和本地结果 Sheet 名。根目录 `sum_daily_conversion\data` 下的 Excel 仍可读取，但没有店铺身份时只能按唯一商品映射回退，建议优先放入对应店铺目录。
+
+请用 WPS 或 Excel 编辑 `product_sheet_mapping.xlsx`，不要另存为 CSV。“商品ID”列已固定为文本格式，填写或粘贴 19 位商品 ID 时请保持该列的文本格式。
 
 文件放错目录，程序就会按错店铺算。
 

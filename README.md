@@ -79,7 +79,7 @@ TikTokShopDataTool/
 └── sum_daily_conversion/
     ├── config/
     │   ├── config.json
-    │   └── product_sheet_mapping.csv
+    │   └── product_sheet_mapping.xlsx
     ├── data/
     └── result/
 ```
@@ -506,9 +506,9 @@ macOS 打包出来的是 macOS 可执行文件，不能给 Windows 直接使用�
 全部使用“SKU 订单数”，各渠道使用“归因 SKU 订单数”，与源表 CTOR 口径一致；不平均商品百分比。
 缺少字段或存在缺失值时对应合计留空，分母为零时比率留空。单品页仍按商品映射输出。
 
-### EXE 提示缺少转化配置或 product_sheet_mapping.csv
+### EXE 提示缺少转化配置或 product_sheet_mapping.xlsx
 
-说明发布包不完整。应从 `release/TikTokShopDataTool_v<版本号>_windows.zip` 完整解压后运行，不能只复制 EXE 文件。
+说明发布包不完整。应从 `release/TikTokShopDataTool_v<版本号>_windows.zip` 完整解压后运行，不能只复制 EXE 文件。使用 WPS 或 Excel 编辑 XLSX 映射表，商品 ID 列必须保持文本格式。
 配置更新由打包人员在源码目录执行 `git pull` 后重新运行 `build_windows_release.bat`，再分发新版 ZIP；EXE 不会在运行时联网下载配置。
 
 ### 双击后提示找不到 app_config.xlsx

@@ -63,7 +63,7 @@ build_windows_release.bat
 - sum_daily_order\config\app_config.xlsx
 - sum_daily_order\config\cache\（如有离线缓存）
 - sum_daily_conversion\config\config.json
-- sum_daily_conversion\config\product_sheet_mapping.csv
+- sum_daily_conversion\config\product_sheet_mapping.xlsx
 - VERSION 和使用说明
 
 最终生成可分发的压缩包：
@@ -92,7 +92,7 @@ release\TikTokShopDataTool_v1.1.0\
 └── sum_daily_conversion\
     ├── config\
     │   ├── config.json
-    │   └── product_sheet_mapping.csv
+    │   └── product_sheet_mapping.xlsx
     ├── data\
     └── result\
 
@@ -120,7 +120,7 @@ sum_daily_conversion\data\日本跨境店
 sum_daily_conversion\data\日本直邮一店
 sum_daily_conversion\data\日本直邮二店
 
-这些店铺目录来自 product_sheet_mapping.csv 的第一列“店铺”。
+这些店铺目录来自 product_sheet_mapping.xlsx 的第一列“店铺”。“商品ID”列为文本格式，请使用 WPS 或 Excel 直接编辑该 XLSX 文件，不要另存为 CSV。
 把商品数据 Excel 放到对应店铺目录，再运行“商品每日转化统计”。
 
 

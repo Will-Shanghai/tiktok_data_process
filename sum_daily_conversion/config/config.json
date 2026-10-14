@@ -3,7 +3,7 @@
   "date_output_format": "mmdd",
   "output_mode": "local_excel",
   "data_dir": "data",
-  "mapping_file": "config/product_sheet_mapping.csv",
+  "mapping_file": "config/product_sheet_mapping.xlsx",
   "output_dir": "result",
   "log_dir": "result/logs",
   "gmv_max_rules": {

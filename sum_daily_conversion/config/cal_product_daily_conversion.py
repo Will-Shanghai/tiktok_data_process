@@ -458,28 +458,31 @@ class ProductMapping:
 
 
 def load_mapping(path: Path) -> ProductMapping:
+    if path.suffix.lower() != ".xlsx":
+        raise ValueError(f"映射表必须是 .xlsx 文件：{path}")
+    rows = read_xlsx_rows(path)
+    if not rows:
+        raise ValueError(f"映射表为空：{path}")
+    fieldnames = [str(name).strip() for name in rows[0]]
+    required = {"店铺", "商品ID"}
+    name_column = next((name for name in ("商品名称", "商品名", "飞书sheet名") if name in fieldnames), None)
+    if not required.issubset(fieldnames) or not name_column:
+        raise ValueError("映射表必须包含列：店铺, 商品ID, 商品名称（旧版可使用 商品名 或 飞书sheet名）")
+
     mapping = ProductMapping()
-    with path.open("r", encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        fieldnames = set(reader.fieldnames or [])
-        required = {"店铺", "商品ID"}
-        name_column = next((name for name in ("商品名称", "商品名", "飞书sheet名") if name in fieldnames), None)
-        if not required.issubset(fieldnames) or not name_column:
-            raise ValueError("映射表必须包含列：店铺, 商品ID, 商品名称（旧版可使用 商品名 或 飞书sheet名）")
-        for row in reader:
-            store = (row.get("店铺") or "").strip()
-            product_id = normalize_product_id(row.get("商品ID") or "")
-            product_name = (row.get(name_column) or "").strip()
-            sheet_name = (row.get("飞书sheet名") or product_name).strip()
-            if not store or not product_name or not sheet_name:
-                continue
-            if not product_id and not product_name:
-                continue
-            if product_id.lower() == "xxx":
-                product_id = ""
-            if not product_id and not product_name:
-                continue
-            mapping.add(store, product_id, product_name, sheet_name)
+    for values in rows[1:]:
+        row = {field: values[index] if index < len(values) else "" for index, field in enumerate(fieldnames)}
+        store = str(row.get("店铺") or "").strip()
+        product_id = normalize_product_id(row.get("商品ID") or "")
+        product_name = str(row.get(name_column) or "").strip()
+        sheet_name = str(row.get("飞书sheet名") or product_name).strip()
+        if not store or not product_name or not sheet_name:
+            continue
+        if product_id.lower() == "xxx":
+            product_id = ""
+        if not product_id and not product_name:
+            continue
+        mapping.add(store, product_id, product_name, sheet_name)
     return mapping
 
 
@@ -769,7 +772,7 @@ def write_skipped(skipped: List[SkippedProduct], log_dir: Path) -> Optional[Path
 
 
 def write_mapping_diagnostics(mapping: ProductMapping, log_dir: Path) -> Optional[Path]:
-    """输出映射表体检表，方便运营补齐/修正 product_sheet_mapping.csv。"""
+    """输出映射表体检表，方便运营补齐/修正 product_sheet_mapping.xlsx。"""
     if not mapping.entries:
         return None
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -1232,10 +1235,10 @@ def write_local_excels_by_store(rows: List[ProductRow], output_dir: Path, store_
 
 
 def initialize_data_store_dirs(config_path: str | Path = "config/config.json") -> List[str]:
-    """Create data/<店铺> folders from product_sheet_mapping.csv before input files arrive."""
+    """Create data/<店铺> folders from product_sheet_mapping.xlsx before input files arrive."""
     config = load_config(resolve_project_path(config_path))
     data_dir = resolve_project_path(config.get("data_dir", "data"))
-    mapping_file = resolve_project_path(config.get("mapping_file", "mapping/product_sheet_mapping.csv"))
+    mapping_file = resolve_project_path(config.get("mapping_file", "config/product_sheet_mapping.xlsx"))
     return ensure_store_dirs(data_dir, load_mapping(mapping_file))
 
 
@@ -1244,7 +1247,7 @@ def run_daily_conversion(config_path: str | Path = "config/config.json", env_pat
     load_env(resolve_project_path(env_path))
     configured_data_dir = resolve_project_path(config.get("data_dir", "data"))
     data_dir = resolve_data_dir(configured_data_dir)
-    mapping_file = resolve_project_path(config.get("mapping_file", "mapping/product_sheet_mapping.csv"))
+    mapping_file = resolve_project_path(config.get("mapping_file", "config/product_sheet_mapping.xlsx"))
     log_dir = resolve_project_path(config.get("log_dir", "outputs/logs"))
     output_dir = resolve_project_path(config.get("output_dir", "outputs/daily_convarsion_data"))
     output_mode = config.get("output_mode", "local_excel")
@@ -1269,7 +1272,7 @@ def run_daily_conversion(config_path: str | Path = "config/config.json", env_pat
 
     input_files = list(iter_input_files(data_dir, store_dirs))
     if not input_files:
-        print(f"[WARN] 未找到输入 Excel：{data_dir}。product_sheet_mapping.csv 只负责商品映射，不能代替源数据文件。")
+        print(f"[WARN] 未找到输入 Excel：{data_dir}。product_sheet_mapping.xlsx 只负责商品映射，不能代替源数据文件。")
 
     for store, path in input_files:
         rows = read_xlsx_rows(path)

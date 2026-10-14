@@ -107,7 +107,7 @@ Config:
 
 ```text
 sum_daily_conversion/config/config.json
-sum_daily_conversion/config/product_sheet_mapping.csv
+sum_daily_conversion/config/product_sheet_mapping.xlsx
 ```
 
 Input:
@@ -132,7 +132,7 @@ Keep `result/logs/`. It stores dry-run previews, skipped unmapped products, and 
 
 ### Mapping matching rules (important)
 
-`product_sheet_mapping.csv` is keyed by `(店铺, 商品ID)` and supports two data layouts:
+`product_sheet_mapping.xlsx` is keyed by `(店铺, 商品ID)` and supports two data layouts:
 
 1. **Store subdirectories** — `data/日本本土店/xxx.xlsx`. The store comes from the folder
    name, so matching with `(store, product_id)` is exact.
@@ -253,7 +253,7 @@ which already has pandas + openpyxl:
 
 Regression test for the mapping fallback (store-directory mode must still match exactly):
 
-1. Create a temp root with `config/config.json`, `config/product_sheet_mapping.csv`,
+1. Create a temp root with `config/config.json`, `config/product_sheet_mapping.xlsx`,
    `data/日本直邮一店/0903-0909商品数据.xlsx` and `result/logs/`.
 2. Run with `TIKTOK_CONVERSION_ROOT=<temp root>` set *before* importing the module and assert
    16 records are parsed with match mode `精确(店铺+商品ID)` in `mapping_diagnostics.csv`.

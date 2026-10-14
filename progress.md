@@ -50,7 +50,7 @@ tiktok_data_process/
     ├── config/
     │   ├── cal_product_daily_conversion.py
     │   ├── config.json
-    │   └── product_sheet_mapping.csv
+    │   └── product_sheet_mapping.xlsx
     ├── data/
     └── result/
 ```
@@ -131,7 +131,7 @@ SKU/成本配置来自：
 配置文件：
 
 - `sum_daily_conversion/config/config.json`
-- `sum_daily_conversion/config/product_sheet_mapping.csv`
+- `sum_daily_conversion/config/product_sheet_mapping.xlsx`
 
 输入目录：
 
@@ -157,7 +157,7 @@ SKU/成本配置来自：
 
 根因是**映射匹配逻辑**，不是路径问题：
 
-- `product_sheet_mapping.csv` 的主键是 `(店铺, 商品ID)`，店铺取值为 `日本本土店 / 日本跨境店 / 日本直邮一店 / 日本直邮二店`。
+- `product_sheet_mapping.xlsx` 的主键是 `(店铺, 商品ID)`，店铺取值为 `日本本土店 / 日本跨境店 / 日本直邮一店 / 日本直邮二店`。
 - 但 `sum_daily_conversion/data/` 当前是**扁平目录**（两个 xlsx 直接放在 data 下，没有店铺子目录）。
 - `discover_store_dirs()` 返回空 → 店铺退化成占位名 `商品每日转化统计`（`DEFAULT_FLAT_STORE_NAME`）。
 - 于是 `mapping.get(("商品每日转化统计", 商品ID))` 永远命中不了 → 743 条全部按「未配置映射」跳过 → 输出 0 条。
@@ -174,7 +174,7 @@ SKU/成本配置来自：
 - 精确优先：分店铺目录（`data/日本本土店/xxx.xlsx`）走精确匹配，且优先于任何回退。
 - 扁平回退：`data/xxx.xlsx` 无店铺信息时才回退到 商品ID / 商品名。
 - 歧义安全：回退时同 ID 多 sheet 一律跳过报错，不猜。
-- `product_sheet_mapping.csv` 可选列 `商品名`：当商品ID 为空或写成 `xxx` 占位时，用商品名兜底。
+- `product_sheet_mapping.xlsx` 可选列 `商品名`：当商品ID 为空或写成 `xxx` 占位时，用商品名兜底。
 
 ### 5.3 当前待处理
 
@@ -286,7 +286,7 @@ TikTokShopDataTool_v<版本号>/
 
 - 不要提交真实 `.env`。
 - 不要删除 `sum_daily_conversion/result/logs/`，除非用户明确只想清理输出。
-- 不要把 `sum_daily_conversion/config/config.json` 和 `product_sheet_mapping.csv` 移回根目录。
+- 不要把 `sum_daily_conversion/config/config.json` 和 `product_sheet_mapping.xlsx` 移回根目录。
 - 不要把墨西哥本土店和直邮店逻辑混在一起改。
 - 不要把日本/越南/墨西哥的成本逻辑抽成一个公共算法，除非有明确测试覆盖。
 - 修改打包逻辑时，要同步 GitHub Actions 和备用 `.workflow`。
@@ -298,7 +298,7 @@ TikTokShopDataTool_v<版本号>/
 2. 再看 `README.md` 和 `TikTokShopDataTool_使用说明.txt`。
 3. 进入 `main.py`，理解功能分流。
 4. 订单日报问题再看对应国家脚本。
-5. 每日转化问题先看 `sum_daily_conversion/config/cal_product_daily_conversion.py` 和 `product_sheet_mapping.csv`。
+5. 每日转化问题先看 `sum_daily_conversion/config/cal_product_daily_conversion.py` 和 `product_sheet_mapping.xlsx`。
 6. 当前最应该优先处理的是转化统计映射表不匹配导致 0 条输出的问题。
 
 ## 10. 最近验证命令
