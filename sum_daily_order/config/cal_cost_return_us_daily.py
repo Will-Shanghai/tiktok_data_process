@@ -70,7 +70,13 @@ for env_path in [
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 
-FEISHU_SHEET_TOKEN = os.getenv("FEISHU_SHEET_TOKEN_SEA") or os.getenv("FEISHU_SHEET_TOKEN") or ""
+# 美国使用美洲配置表。保留 US 专用变量，兼容项目现有的美洲共用变量。
+FEISHU_SHEET_TOKEN = (
+    os.getenv("FEISHU_SHEET_TOKEN_US")
+    or os.getenv("FEISHU_SHEET_TOKEN_AMERICAS")
+    or os.getenv("FEISHU_SHEET_TOKEN")
+    or ""
+)
 FEISHU_RANGE_SKU = "A:Z"
 FEISHU_REQUIRED_SCOPE_HINT = "请在飞书开放平台给应用开通 sheets:spreadsheet:readonly 或 sheets:spreadsheet:read 权限，并重新发布/生效。"
 
@@ -271,7 +277,7 @@ def get_config_dataframe(sheet_name, force_refresh=False):
     try:
         if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
             raise EnvironmentError(
-                "未配置 FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_SHEET_TOKEN_SEA，无法从飞书刷新配置。"
+                "未配置 FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_SHEET_TOKEN_US（或 FEISHU_SHEET_TOKEN_AMERICAS），无法从飞书刷新配置。"
             )
         token = get_feishu_token(FEISHU_APP_ID, FEISHU_APP_SECRET)
         df = read_feishu_sheet(token, FEISHU_SHEET_TOKEN, sheet_name, FEISHU_RANGE_SKU)
