@@ -778,6 +778,7 @@ def run_report(store_config, config_df, exchange_rate):
     n_col = "SKU Platform Discount"
     p_col = "SKU Subtotal After Discount"
     r_col = "Original Shipping Fee"
+    s_col = "Shipping Fee Seller Discount"
     p_display_col = "除运费外销售额"
     logistics_col = "物流成本(元)"
     sample_cost_col = "寄样成本(元)"
@@ -799,7 +800,7 @@ def run_report(store_config, config_df, exchange_rate):
             print(f"读取失败 {file_name}: {e}")
             continue
 
-        required_order_cols = [status_col, quantity_col, SKU_ID_COLUMN, n_col, p_col, r_col]
+        required_order_cols = [status_col, quantity_col, SKU_ID_COLUMN, n_col, p_col, r_col, s_col]
         missing_order_cols = [col for col in required_order_cols if col not in df.columns]
         if missing_order_cols:
             print(f"⚠️ 文件 {file_name} 缺少必要列: {', '.join(missing_order_cols)}，跳过")
@@ -817,7 +818,7 @@ def run_report(store_config, config_df, exchange_rate):
         df_normal["日期"] = df_normal["Paid Time"].map(parse_order_date)
         df_normal = df_normal.dropna(subset=["日期"]).copy()
 
-        for col in [n_col, p_col, r_col]:
+        for col in [n_col, p_col, r_col, s_col]:
             df_normal[col] = df_normal[col].map(parse_amount)
         df_normal[p_display_col] = df_normal[n_col] + df_normal[p_col]
         df_normal["SKU_ID"] = clean_sku_str(df_normal[SKU_ID_COLUMN])
@@ -850,6 +851,7 @@ def run_report(store_config, config_df, exchange_rate):
             p_col: "sum",
             p_display_col: "sum",
             r_col: "sum",
+            s_col: "sum",
             "产品成本(元)": "first",
             sample_cost_col: "first",
             "SKU_ID": "count",
@@ -871,7 +873,7 @@ def run_report(store_config, config_df, exchange_rate):
         else:
             sku_daily_order_count = norm_agg[["日期", "Product Category", "Mapped Name", "销量"]].copy()
             sku_daily_order_count.rename(columns={"销量": "订单数"}, inplace=True)
-        norm_agg["销售额"] = norm_agg[n_col] + norm_agg[p_col] + norm_agg[r_col]
+        norm_agg["销售额"] = norm_agg[n_col] + norm_agg[p_col] + norm_agg[r_col] - norm_agg[s_col]
         norm_agg["产品成本"] = norm_agg["销量"] * norm_agg["产品成本(元)"]
         logistics_daily_product = build_order_logistics_allocation(df_normal, logistics_col)
         norm_agg = norm_agg.merge(

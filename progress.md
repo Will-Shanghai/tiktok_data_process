@@ -210,6 +210,15 @@ SKU Platform Discount + SKU Subtotal After Discount
 
 不要再使用旧的 `P列折后价` 命名。
 
+所有站点订单表里的“销售额”口径已统一为：
+
+```text
+SKU Platform Discount + SKU Subtotal After Discount
++ Original Shipping Fee - Shipping Fee Seller Discount
+```
+
+其中 `Shipping Fee Seller Discount` 按订单 CSV 的字段名读取，不按固定列位置判断。
+
 ### 6.3 飞书合并单元格
 
 飞书配置表里的 `产品大类` 可能是合并单元格。读取配置后要向下填充，否则同一产品系列会被拆成带颜色/规格的多个产品大类。
@@ -222,7 +231,7 @@ SKU Platform Discount + SKU Subtotal After Discount
 
 - 没有正常订单 IVA。
 - 没有寄样 IVA。
-- 销售额不应包含 `Original Shipping Fee`。
+- 销售额包含 `Original Shipping Fee`，并扣除 `Shipping Fee Seller Discount`。
 - 物流成本 = 飞书配置的 `头程物流成本(元) + 尾程物流成本(元)`。
 - 样品支出 = 产品成本 + 物流成本。
 

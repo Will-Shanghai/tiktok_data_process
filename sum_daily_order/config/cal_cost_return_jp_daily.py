@@ -885,6 +885,7 @@ def run_report(combo, config_df, exchange_rate):
     n_col = 'SKU Platform Discount'
     p_col = 'SKU Subtotal After Discount'
     r_col = 'Original Shipping Fee'
+    s_col = 'Shipping Fee Seller Discount'
     p_display_col = '除运费外销售额'
 
     daily_product_detail_list = []
@@ -913,7 +914,7 @@ def run_report(combo, config_df, exchange_rate):
         df_normal['日期'] = df_normal['Paid Time'].map(parse_paid_date)
         df_normal = df_normal.dropna(subset=['日期']).copy()
 
-        for col in [n_col, p_col, r_col]:
+        for col in [n_col, p_col, r_col, s_col]:
             df_normal[col] = df_normal[col].map(parse_amount)
         df_normal[p_display_col] = df_normal[n_col] + df_normal[p_col]
 
@@ -989,6 +990,7 @@ def run_report(combo, config_df, exchange_rate):
             p_col: 'sum',
             p_display_col: 'sum',
             r_col: 'sum',
+            s_col: 'sum',
             '产品成本(元)': 'first',
             ITEM_QUANTITY_COLUMN: 'sum'
         }).reset_index()
@@ -1010,7 +1012,8 @@ def run_report(combo, config_df, exchange_rate):
             sku_daily_order_count = normal_daily_product[['日期', 'Product Category', 'Mapped Name', '销量']].copy()
             sku_daily_order_count.rename(columns={'销量': '订单数'}, inplace=True)
         normal_daily_product['销售额'] = (
-            normal_daily_product[n_col] + normal_daily_product[p_col] + normal_daily_product[r_col]
+            normal_daily_product[n_col] + normal_daily_product[p_col]
+            + normal_daily_product[r_col] - normal_daily_product[s_col]
         )
         normal_daily_product['产品成本'] = normal_daily_product['销量'] * normal_daily_product['产品成本(元)']
         if store_key in JP_DIRECT_STORE_KEYS:
