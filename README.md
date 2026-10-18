@@ -4,6 +4,7 @@
 
 - 日本站日报：`sum_daily_order/config/cal_cost_return_jp_daily.py`
 - 越南站日报：`sum_daily_order/config/cal_cost_return_vn_daily.py`
+- 美国跨境店日报：`sum_daily_order/config/cal_cost_return_us_daily.py`
 - 墨西哥站日报：`sum_daily_order/config/cal_cost_return_mx_daily.py`
 - 打包友好的统一入口：`main.py`
 
@@ -102,7 +103,7 @@ TikTokShopDataTool/sum_daily_order/config/app_config.xlsx
 
 ```text
 enabled       1=启用，0=跳过
-country_code  JP=日本，VN=越南，MX=墨西哥
+country_code  JP=日本，VN=越南，US=美国，MX=墨西哥
 country_name  中文国家名
 store_key     输出文件名使用
 store_name    中文店铺名

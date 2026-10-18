@@ -58,7 +58,7 @@ Python 3.11 本体建议从 Python 官方安装器、公司软件中心或可信
 
 build_windows_release.bat
 
-脚本会自动打包日本、越南、墨西哥订单统计和商品每日转化四个模块，并复制当前源码中的：
+脚本会自动打包日本、越南、美国、墨西哥订单统计和商品每日转化五个模块，并复制当前源码中的：
 
 - sum_daily_order\config\app_config.xlsx
 - sum_daily_order\config\cache\（如有离线缓存）

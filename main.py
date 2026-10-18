@@ -3,7 +3,7 @@
 TikTok Shop daily report launcher.
 
 This is the packaging-friendly entry point for Windows/macOS users. It reads
-config/app_config.xlsx, then runs the enabled JP/VN/data_MX daily report jobs.
+config/app_config.xlsx, then runs the enabled JP/VN/US/MX daily report jobs.
 """
 
 import argparse
@@ -138,6 +138,16 @@ DEFAULT_STORES = [
     },
     {
         "enabled": 1,
+        "country_code": "US",
+        "country_name": "美国",
+        "store_key": "cross_border",
+        "store_name": "跨境店",
+        "store_dir": "cross_border",
+        "sheet_name": "美国_跨境店",
+        "说明": "美国跨境店订单 CSV 放 data/data_US/cross_border",
+    },
+    {
+        "enabled": 1,
         "country_code": "MX",
         "country_name": "墨西哥",
         "store_key": "direct_old",
@@ -238,6 +248,7 @@ def ensure_runtime_dirs():
         "data/data_MX/local",
         "data/data_MX/direct_old",
         "data/data_MX/direct_new",
+        "data/data_US/cross_border",
         "config/cache",
     ]:
         (APP_ROOT / folder).mkdir(parents=True, exist_ok=True)
@@ -250,7 +261,7 @@ def create_default_app_config():
     notes_df = pd.DataFrame(
         [
             ["enabled", "1 表示运行，0 表示跳过。"],
-            ["country_code", "JP=日本，VN=越南，MX=墨西哥。"],
+            ["country_code", "JP=日本，VN=越南，US=美国，MX=墨西哥。"],
             ["store_key", "输出文件名使用，例如 Daily_Performance_Report_JP_direct_old.xlsx。"],
             ["store_dir", "订单 CSV 所在目录名，例如 data/data_JP/direct_old。"],
             ["sheet_name", "飞书配置表 Sheet 名称。"],
@@ -275,6 +286,7 @@ def normalize_country_code(value):
     aliases = {
         "日本": "JP",
         "越南": "VN",
+        "美国": "US",
         "墨西哥": "MX",
     }
     return aliases.get(value, value)
@@ -321,9 +333,10 @@ def choose_site():
     print("1. 日本 JP")
     print("2. 越南 VN")
     print("3. 墨西哥 MX")
-    print("4. 全部 all")
+    print("4. 美国 US")
+    print("5. 全部 all")
     choice = input("请输入数字后回车: ").strip()
-    return {"1": "JP", "2": "VN", "3": "MX", "4": "all"}.get(choice, "")
+    return {"1": "JP", "2": "VN", "3": "MX", "4": "US", "5": "all"}.get(choice, "").strip()
 
 
 def choose_task():
@@ -336,7 +349,7 @@ def choose_task():
 
 
 def split_stores_by_site(stores):
-    grouped = {"JP": [], "VN": [], "MX": []}
+    grouped = {"JP": [], "VN": [], "US": [], "MX": []}
     for store in stores:
         country_code = normalize_country_code(store["country_code"])
         if country_code in grouped:
@@ -393,14 +406,14 @@ def run(site):
     grouped = split_stores_by_site(stores)
 
     if site == "all":
-        selected_sites = ["JP", "VN", "MX"]
+        selected_sites = ["JP", "VN", "US", "MX"]
     else:
         selected_sites = [normalize_country_code(site)]
 
     enabled_stores = [
         store
         for site_code in selected_sites
-        if site_code in {"JP", "VN", "MX"}
+        if site_code in {"JP", "VN", "US", "MX"}
         for store in grouped.get(site_code, [])
     ]
     check_config_sources(enabled_stores)
@@ -420,6 +433,14 @@ def run(site):
             run_vietnam_daily(grouped["VN"])
         else:
             print("⚠️ app_config.xlsx 中没有启用的越南店铺，已跳过。")
+
+    if "US" in selected_sites:
+        if grouped["US"]:
+            from sum_daily_order.config.cal_cost_return_us_daily import run_us_daily
+
+            run_us_daily(grouped["US"])
+        else:
+            print("⚠️ app_config.xlsx 中没有启用的美国店铺，已跳过。")
 
     if "MX" in selected_sites:
         mx_stores = grouped["MX"]
@@ -460,7 +481,7 @@ def main():
     except Exception as exc:
         startup_log(f"转化统计目录初始化失败，将在运行转化统计时提示详情: {exc}")
     parser = argparse.ArgumentParser(description="TikTok Shop data tool launcher")
-    parser.add_argument("--site", choices=["JP", "VN", "MX", "all"], help="直接运行指定站点")
+    parser.add_argument("--site", choices=["JP", "VN", "US", "MX", "all"], help="直接运行指定站点")
     parser.add_argument("--task", choices=["order", "conversion", "all"], help="直接运行指定功能")
     parser.add_argument("--dry-run", action="store_true", help="转化统计只解析预览，不写入飞书")
     parser.add_argument("--list", action="store_true", help="列出 app_config.xlsx 中启用的店铺")
@@ -492,7 +513,7 @@ def main():
 
         if task in {"order", "all"}:
             site = args.site or choose_site()
-            if site not in {"JP", "VN", "MX", "all"}:
+            if site not in {"JP", "VN", "US", "MX", "all"}:
                 print("未选择有效站点，已跳过订单成本日报。")
             else:
                 run(site)

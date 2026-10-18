@@ -17,7 +17,7 @@ if not exist sum_daily_conversion\config\product_sheet_mapping.xlsx goto missing
 if exist "%RELEASE_ROOT%" goto release_exists
 
 echo Building %EXE_BASE% ...
-python -m PyInstaller --clean --noconfirm --onedir --name "%EXE_BASE%" --hidden-import sum_daily_order.config.cal_cost_return_jp_daily --hidden-import sum_daily_order.config.cal_cost_return_vn_daily --hidden-import sum_daily_order.config.cal_cost_return_mx_daily --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
+python -m PyInstaller --clean --noconfirm --onedir --name "%EXE_BASE%" --hidden-import sum_daily_order.config.cal_cost_return_jp_daily --hidden-import sum_daily_order.config.cal_cost_return_vn_daily --hidden-import sum_daily_order.config.cal_cost_return_mx_daily --hidden-import sum_daily_order.config.cal_cost_return_us_daily --hidden-import sum_daily_conversion.config.cal_product_daily_conversion main.py
 if errorlevel 1 goto failed
 
 mkdir "%RELEASE_ROOT%\config"
@@ -31,6 +31,7 @@ mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_VN\cross_border"
 mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_MX\local"
 mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_MX\direct_old"
 mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_MX\direct_new"
+mkdir "%RELEASE_ROOT%\sum_daily_order\data\data_US\cross_border"
 mkdir "%RELEASE_ROOT%\sum_daily_order\result"
 mkdir "%RELEASE_ROOT%\sum_daily_conversion\config"
 mkdir "%RELEASE_ROOT%\sum_daily_conversion\data"
